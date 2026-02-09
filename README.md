@@ -42,72 +42,39 @@ The market maker quotes bid and ask prices on multiple FX currency pairs. The mo
 ```
 optimal-market-making-eFX/
 ├── README.md
-├── requirements.txt                        # numpy, matplotlib
-├── multicurrency_mm_reproduction.ipynb     # ODE-based reproduction of [1]
+├── requirements.txt                              # numpy, matplotlib
+├── src/                                          # Shared Python modules
+│   ├── __init__.py
+│   ├── model.py                                  # ModelParams, parameter builders
+│   ├── hamiltonian.py                            # Logistic intensity, optimal quotes
+│   ├── riccati.py                                # Sigma, M, Mtilde, P, Riccati ODE solver
+│   ├── policy.py                                 # Quote/hedge policies, MMResult, run_multicurrency_mm
+│   ├── simulation.py                             # Monte Carlo inventory simulation
+│   └── plotting.py                               # Visualization helpers
+├── ode_approximation_reproduction.ipynb           # ODE-based reproduction of [1]
+├── hjb_pde_solver.ipynb                           # Grid-based HJB PDE solver (2-3 currencies)
+├── pde_vs_ode_comparison.ipynb                    # Comparison: PDE solution vs ODE approximation
+├── sensitivity_analysis.ipynb                     # Sensitivity analysis & uncertainty quantification
+├── pinns_solver.ipynb                             # PINNs-based HJB solver (extension)
+├── references/                                    # Reference papers
 └── .gitignore
 ```
 
-### `multicurrency_mm_reproduction.ipynb`
+## Notebooks
 
-Jupyter notebook that reproduces the ODE-based approximation and key figures from [1]. Contains all logic in self-contained functions. Sections:
-
-| Section | Description |
-|---------|-------------|
-| 1. Parameters / configuration | `ModelParams` dataclass with all model inputs. `build_paper_example_params()` reproduces Table 1 from [1] (5 currencies: USD, EUR, JPY, GBP, CHF; 2 tiers; sizes 1/5/10/20/50 M$). `restrict_currencies()` projects to a subset. |
-| 2. Logistic intensity + optimal quotes | `logistic_f()`, `optimal_delta_logistic()` (bisection on `g'(delta)=0`), `H_logistic()` returning `(H, delta_bar, f_star)`. |
-| 3. Quadratic approximation coefficients | `quadratic_coeffs_H_logistic()` computing `alpha_0, alpha_1, alpha_2` via envelope theorem + finite differences. |
-| 4. Build Sigma, M, M_tilde, P and Riccati ODE | `build_Sigma()`, `build_M_tildeM_P()`, `solve_AB_euler()` (backward explicit Euler). |
-| 5. Policy functions | `optimal_client_markup()` and `optimal_hedge_rate()` using `A(0), B(0)`. |
-| 6. Main wrapper | `run_multicurrency_mm()` returning `MMResult` with helper methods `.markup()` and `.hedge_rate()`. |
-| 7-8. Reproduction plots | Figures 1-2 from [1]: top-of-book quotes vs inventory, hedging rates vs inventory. |
-| 9. Diagnostics | Eigenvalue checks for Sigma and A(0), verification that B(0) = 0 for symmetric parameters. |
-| 10. Monte Carlo simulation skeleton | Tau-leaping Poisson simulator for inventory paths under the approximate policy. |
-
-### Key Functions
-
-| Function | Purpose |
-|----------|---------|
-| `build_paper_example_params()` | Constructs `ModelParams` matching Table 1 of [1] |
-| `restrict_currencies(mp, keep)` | Projects model to a currency subset |
-| `optimal_delta_logistic(p, alpha, beta)` | Computes optimal quote via bisection |
-| `H_logistic(p, alpha, beta)` | Evaluates Hamiltonian and optimal quote |
-| `quadratic_coeffs_H_logistic(alpha, beta)` | Computes quadratic approximation coefficients |
-| `build_Sigma(mp)` | Constructs covariance matrix from vols and correlations |
-| `build_M_tildeM_P(mp)` | Constructs aggregated matrices from client parameters |
-| `solve_AB_euler(mp, M, Mtilde, P, Sigma)` | Solves Riccati ODE backward via explicit Euler |
-| `run_multicurrency_mm(mp)` | End-to-end solver returning `MMResult` |
-| `simulate_inventory_path_tau_leap(res, ...)` | Monte Carlo inventory simulation |
-
-## Planned Development
-
-The following components are planned but not yet implemented:
-
-- **HJB PDE solver** (grid-based finite difference/element method for 2-3 currencies)
-- **Comparison framework** between PDE solution and ODE approximation
-- **Sensitivity analysis** (parameter sweeps over gamma, sigma, lambda, etc.)
-- **Uncertainty quantification**
-- **PINN-based solver** (extension, if time permits)
+| Notebook | Description |
+|----------|-------------|
+| `ode_approximation_reproduction.ipynb` | Reproduces the ODE-based quadratic approximation from [1]. Includes parameters from Table 1, Riccati ODE solver, optimal quotes, hedging rates, and Monte Carlo simulation. |
+| `hjb_pde_solver.ipynb` | Grid-based finite difference solver for the full HJB PDE in 2-3 currency settings. |
+| `pde_vs_ode_comparison.ipynb` | Compares the PDE solution against the ODE approximation: value functions, optimal controls, error analysis, and P&L under both policies. |
+| `sensitivity_analysis.ipynb` | Parameter sweeps and uncertainty quantification for risk aversion, volatility, correlations, order flow, and hedging costs. |
+| `pinns_solver.ipynb` | Physics-informed neural network solver for the HJB equation, targeting higher-dimensional cases beyond the grid-based approach. |
 
 ## Usage
 
 ```bash
 pip install -r requirements.txt
-jupyter notebook multicurrency_mm_reproduction.ipynb
-```
-
-To run the model programmatically (within the notebook or after extracting to `.py` files):
-
-```python
-mp = build_paper_example_params()
-# Optionally restrict to fewer currencies:
-# mp = restrict_currencies(mp, ["USD", "EUR", "GBP"])
-res = run_multicurrency_mm(mp, n_steps=2000)
-
-# Query optimal quotes
-delta = res.markup(tier_idx=0, ccy_pay="EUR", ccy_sell="USD", z_musd=1.0, y=np.zeros(5))
-
-# Query optimal hedging rate
-xi = res.hedge_rate(ccy_buy="EUR", ccy_sell="USD", y=np.zeros(5))
+jupyter notebook ode_approximation_reproduction.ipynb
 ```
 
 ## References
