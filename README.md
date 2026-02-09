@@ -16,13 +16,17 @@ This project is based on the work of Barzykin, Bergault, and Guéant [1], who fo
 
 ## Mathematical Framework
 
-The market maker quotes bid and ask prices on multiple FX currency pairs. The model uses:
+The market maker simultaneously quotes bid and ask prices on multiple FX currency pairs. Incoming client trades arrive according to a **logistic intensity model**: each trade size and tier has arrival rate `Lambda(z, delta) = lambda(z) * f(z, delta)` where `f(z, delta) = 1 / (1 + exp(alpha + beta * delta))`. The market maker also hedges inventory risk by trading on the dealer-to-dealer (D2D) market at a cost `L(xi) = psi*|xi| + eta*xi^2`.
 
-- **Logistic client-demand model:** Trade arrival intensity per tier, direction, and size is `Lambda(z, delta) = lambda(z) * f(z, delta)` where `f(z, delta) = 1 / (1 + exp(alpha + beta * delta))`.
-- **Hamiltonian:** `H(z, p) = sup_delta f(z, delta) * (delta - p)`, where the optimal quote `delta_bar(z, p)` is the argmax.
-- **Quadratic approximation** of the Hamiltonian around `p=0`: `H_check(z, p) = alpha_0(z) + alpha_1(z)*p + 0.5*alpha_2(z)*p^2`, yielding closed-form matrices `M`, `M_tilde`, `P`.
-- **Matrix Riccati ODE** for `A(t)` and `B(t)` (Eq. (5) in [1]), solved backward from terminal time `T`.
-- **Optimal quotes** and **hedging rates** are then computed from `A(t)`, `B(t)`, and the current inventory vector `Y`.
+The market maker's objective is to maximize expected terminal P&L minus a risk penalty on inventory, leading to a **Hamilton-Jacobi-Bellman (HJB) PDE** for the value function `theta(t, S, Y)`, where `S` is the vector of exchange rates and `Y` is the inventory vector.
+
+### Solution approaches
+
+1. **Full HJB PDE** (grid-based finite differences): Solves the PDE directly on a discretized state space. Exact but limited to low dimensions (2-3 currencies) due to the curse of dimensionality.
+
+2. **ODE approximation** [1]: Under a quadratic ansatz `theta ~ -Y^T A(t) Y - Y^T B(t) - C(t)`, the HJB PDE reduces to a system of matrix Riccati ODEs for `A(t)` and `B(t)`, solved backward from terminal time. This yields closed-form optimal quotes and hedging rates as functions of `A`, `B`, and the current inventory `Y`. Scales to many currencies but relies on the quadratic approximation.
+
+3. **Physics-informed neural networks (PINNs)** (extension): Learns the value function by enforcing the HJB PDE as a loss term, potentially handling higher dimensions without grid-based discretization.
 
 ### Key Quantities
 
@@ -33,8 +37,6 @@ The market maker quotes bid and ask prices on multiple FX currency pairs. The mo
 | `sigma_i` | Volatility of currency `i` vs reference | decimal / sqrt(day) |
 | `gamma` | Risk aversion parameter | 1/M$ |
 | `xi` | Hedging (externalization) rate | M$ / day |
-| `A(t)` | Riccati solution matrix (d x d, symmetric) | - |
-| `B(t)` | Riccati solution vector (d) | - |
 | `L(xi)` | D2D execution cost: `psi*|xi| + eta*xi^2` | decimal |
 
 ## Repository Structure
