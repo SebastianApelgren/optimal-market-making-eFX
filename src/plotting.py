@@ -42,8 +42,8 @@ def plot_top_of_book_quotes_vs_inventory(res: MMResult,
         bid_bps = np.array(bid_bps)
         ask_bps = np.array(ask_bps)
 
-        plt.plot(inventory_grid_musd, bid_bps, label=f"{X}{Y} bid")
-        plt.plot(inventory_grid_musd, ask_bps, linestyle="--", label=f"{X}{Y} ask")
+        line, = plt.plot(inventory_grid_musd, bid_bps, label=f"{X}{Y} bid")
+        plt.plot(inventory_grid_musd, ask_bps, color=line.get_color(), label=f"{X}{Y} ask")
 
     plt.axhline(0.0, linewidth=0.8)
     plt.xlabel(f"{inventory_ccy} Inventory (M$)")
