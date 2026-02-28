@@ -21,3 +21,9 @@ from .simulation import (
 from .plotting import (
     plot_top_of_book_quotes_vs_inventory, plot_hedge_rates_vs_inventory,
 )
+from .pde import (
+    validate_pde_grid,
+    QuotingSpec,
+    build_quoting_spec,
+    quoting_hamiltonian_integral,
+)

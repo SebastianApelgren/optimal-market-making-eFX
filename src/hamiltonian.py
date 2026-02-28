@@ -13,29 +13,30 @@ def logistic_f(delta: float, alpha: float, beta: float) -> float:
 # Lambert-W via Newton iteration (replaces bisection)
 # ---------------------------------------------------------------------------
 
-def _lambert_w0_newton(x: float, tol: float = 1e-12, max_iter: int = 8) -> float:
-    """Compute W_0(x) for x >= 0 via Newton iteration on w*e^w = x."""
-    if x < 1.0:
-        w = x
-    else:
-        w = np.log(1.0 + x)
+def _lambert_w0_newton(x, tol=1e-12, max_iter=8):
+    """Compute W_0(x) for x >= 0 via Newton iteration on w*e^w = x.
+
+    Works on both scalars and numpy arrays.
+    """
+    x = np.asarray(x, dtype=float)
+    w = np.where(x < 1.0, x, np.log(1.0 + x))
     for _ in range(max_iter):
         ew = np.exp(w)
         dw = (w * ew - x) / (ew * (w + 1.0))
         w = w - dw
-        if abs(dw) < tol:
+        if np.all(np.abs(dw) < tol):
             break
     return w
 
 
-def optimal_delta_logistic(p: float, alpha: float, beta: float) -> float:
+def optimal_delta_logistic(p, alpha, beta):
     """Compute delta_bar(p) = argmax_delta f(delta)*(delta-p) via Lambert W."""
     x = np.exp(-(1.0 + alpha + beta * p))
     w = _lambert_w0_newton(x)
     return p + (w + 1.0) / beta
 
 
-def H_logistic(p: float, alpha: float, beta: float) -> Tuple[float, float, float]:
+def H_logistic(p, alpha, beta):
     """Return (H(p), delta_bar(p), f(delta_bar(p))) via Lambert W."""
     x = np.exp(-(1.0 + alpha + beta * p))
     w = _lambert_w0_newton(x)
