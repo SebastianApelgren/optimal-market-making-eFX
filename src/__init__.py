@@ -6,8 +6,6 @@ from .model import (
 from .hamiltonian import (
     logistic_f, optimal_delta_logistic, H_logistic,
     quadratic_coeffs_H_logistic,
-    optimal_delta_newton, H_newton,
-    quadratic_coeffs_H_newton,
 )
 from .riccati import (
     build_Sigma, build_M_tildeM_P, solve_AB_euler,

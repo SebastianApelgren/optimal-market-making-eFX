@@ -79,6 +79,10 @@ The approximate hedging formula in the paper writes `(AY + B)` but the correct g
 - No test suite yet — verify correctness by running the reproduction notebook and comparing against paper values
 - `B0 = 0` in the paper's example because parameters are direction-symmetric (`M̄` symmetric, `V = 0`, `μ = 0`)
 
+## Git
+
+- Never add `Co-Authored-By` lines to commits.
+
 ## Key Functions (Entry Points)
 
 ```python
