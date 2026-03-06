@@ -556,3 +556,41 @@ def running_penalty(
                 result += 2.0 * sij * y_bc[i] * y_bc[j]
 
     return -0.5 * gamma * result
+
+
+def terminal_condition(
+    y_grids: List[np.ndarray],
+    kappa: np.ndarray,
+) -> np.ndarray:
+    """Compute θ(T, y) = -ℓ(y) = -y^T κ y at every grid point.
+
+    Parameters
+    ----------
+    y_grids : list of d 1D arrays (grid axes).
+    kappa : (d, d) positive semi-definite symmetric matrix (terminal penalty).
+
+    Returns
+    -------
+    d-dimensional array on the grid.
+    """
+    d = len(y_grids)
+    shape = tuple(len(g) for g in y_grids)
+    result = np.zeros(shape)
+
+    y_bc = []
+    for k in range(d):
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_bc.append(y_grids[k][tuple(slices)])
+
+    for i in range(d):
+        for j in range(i, d):
+            kij = kappa[i, j]
+            if abs(kij) < 1e-30:
+                continue
+            if i == j:
+                result += kij * y_bc[i] * y_bc[i]
+            else:
+                result += 2.0 * kij * y_bc[i] * y_bc[j]
+
+    return -result

@@ -34,4 +34,5 @@ from .pde import (
     drift_term,
     diffusion_term,
     running_penalty,
+    terminal_condition,
 )
