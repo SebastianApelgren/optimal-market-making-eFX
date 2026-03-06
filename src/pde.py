@@ -167,3 +167,134 @@ def quoting_hamiltonian_integral(
         Q[dst_sl] += z * lam * H_vals
 
     return Q
+
+
+def H_execution_cost(p, psi: float, eta: float):
+    """Hedging Hamiltonian H(p) = (max(|p| - psi, 0))^2 / (4*eta).
+
+    Legendre-Fenchel transform of L(xi) = psi*|xi| + eta*xi^2.
+    Returns 0 in the dead zone |p| <= psi.
+    """
+    p = np.asarray(p, dtype=float)
+    excess = np.maximum(np.abs(p) - psi, 0.0)
+    return excess * excess / (4.0 * eta)
+
+
+def compute_gradient(theta: np.ndarray, dy_list: List[float]) -> List[np.ndarray]:
+    """Compute gradient of theta on a uniform grid via finite differences.
+
+    Uses second-order central differences in the interior and first-order
+    one-sided differences at the boundaries.
+
+    Parameters
+    ----------
+    theta : array of any dimension d
+    dy_list : list of d floats, grid spacing per axis
+
+    Returns
+    -------
+    List of d arrays, each same shape as theta. Entry k is d(theta)/d(y_k).
+    """
+    d = theta.ndim
+    grad = []
+    for k in range(d):
+        n = theta.shape[k]
+        g = np.empty_like(theta)
+
+        # Central differences for interior
+        sl_plus = [slice(None)] * d
+        sl_minus = [slice(None)] * d
+        sl_center = [slice(None)] * d
+        sl_plus[k] = slice(2, n)
+        sl_minus[k] = slice(0, n - 2)
+        sl_center[k] = slice(1, n - 1)
+        g[tuple(sl_center)] = (theta[tuple(sl_plus)] - theta[tuple(sl_minus)]) / (2.0 * dy_list[k])
+
+        # Forward difference at left boundary
+        sl_0 = [slice(None)] * d
+        sl_1 = [slice(None)] * d
+        sl_0[k] = 0
+        sl_1[k] = 1
+        g[tuple(sl_0)] = (theta[tuple(sl_1)] - theta[tuple(sl_0)]) / dy_list[k]
+
+        # Backward difference at right boundary
+        sl_last = [slice(None)] * d
+        sl_prev = [slice(None)] * d
+        sl_last[k] = n - 1
+        sl_prev[k] = n - 2
+        g[tuple(sl_last)] = (theta[tuple(sl_last)] - theta[tuple(sl_prev)]) / dy_list[k]
+
+        grad.append(g)
+    return grad
+
+
+@dataclass(frozen=True)
+class HedgingSpec:
+    """Precomputed specification for the hedging Hamiltonian."""
+    contributions: tuple  # tuple of (i, j, psi, eta, k_i, k_j)
+    d: int                # number of currencies
+
+
+def build_hedging_spec(
+    y_grids: List[np.ndarray],
+    mp: ModelParams,
+) -> HedgingSpec:
+    """Precompute hedging pair info for the hedging Hamiltonian.
+
+    Loops over canonical pairs (i, j) with i < j that exist in mp.pairs.
+    """
+    ccy = mp.currencies
+    d = len(ccy)
+    contributions = []
+
+    for i in range(d):
+        for j in range(i + 1, d):
+            key = canon_pair(ccy[i], ccy[j])
+            if key not in mp.pairs:
+                continue
+            pp = mp.pairs[key]
+            k_i = mp.k.get(ccy[i], 0.0)
+            k_j = mp.k.get(ccy[j], 0.0)
+            contributions.append((i, j, pp.psi, pp.eta, k_i, k_j))
+
+    return HedgingSpec(contributions=tuple(contributions), d=d)
+
+
+def hedging_hamiltonian(
+    grad_theta: List[np.ndarray],
+    y_grids: List[np.ndarray],
+    spec: HedgingSpec,
+) -> np.ndarray:
+    """Evaluate the hedging Hamiltonian at every grid point.
+
+    H_hedge(y) = sum_{i<j} H^{i,j}(p^{i,j}(y))
+
+    where p^{i,j} = grad_theta[i] - grad_theta[j]
+                   + k_i * y_i * (1 + grad_theta[i])
+                   - k_j * y_j * (1 + grad_theta[j]).
+
+    Parameters
+    ----------
+    grad_theta : list of d arrays, each same shape as theta.
+        Entry k is d(theta)/d(y_k), e.g. from compute_gradient.
+    y_grids : list of d 1D arrays (grid axes).
+    spec : HedgingSpec from build_hedging_spec.
+    """
+    shape = grad_theta[0].shape
+    result = np.zeros(shape)
+
+    # Precompute broadcasted y arrays: y_grids[k] along axis k
+    d = spec.d
+    y_broadcast = []
+    for k in range(d):
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_broadcast.append(y_grids[k][tuple(slices)])
+
+    for (i, j, psi, eta, k_i, k_j) in spec.contributions:
+        p = (grad_theta[i] - grad_theta[j]
+             + k_i * y_broadcast[i] * (1.0 + grad_theta[i])
+             - k_j * y_broadcast[j] * (1.0 + grad_theta[j]))
+        result += H_execution_cost(p, psi, eta)
+
+    return result

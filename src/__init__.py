@@ -26,4 +26,9 @@ from .pde import (
     QuotingSpec,
     build_quoting_spec,
     quoting_hamiltonian_integral,
+    H_execution_cost,
+    compute_gradient,
+    HedgingSpec,
+    build_hedging_spec,
+    hedging_hamiltonian,
 )
