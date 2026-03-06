@@ -298,3 +298,229 @@ def hedging_hamiltonian(
         result += H_execution_cost(p, psi, eta)
 
     return result
+
+
+def _second_deriv_diagonal(theta: np.ndarray, axis: int, dy: float) -> np.ndarray:
+    """Compute d²θ/dy_i² via central differences (interior) and one-sided at boundaries."""
+    d = theta.ndim
+    n = theta.shape[axis]
+    out = np.empty_like(theta)
+    dy2 = dy * dy
+
+    # Central: (θ_{k+1} - 2θ_k + θ_{k-1}) / Δy²
+    sl_plus = [slice(None)] * d
+    sl_mid = [slice(None)] * d
+    sl_minus = [slice(None)] * d
+    sl_plus[axis] = slice(2, n)
+    sl_mid[axis] = slice(1, n - 1)
+    sl_minus[axis] = slice(0, n - 2)
+    out[tuple(sl_mid)] = (theta[tuple(sl_plus)] - 2.0 * theta[tuple(sl_mid)] + theta[tuple(sl_minus)]) / dy2
+
+    # Left boundary: (θ_0 - 2θ_1 + θ_2) / Δy²
+    sl_0 = [slice(None)] * d; sl_0[axis] = 0
+    sl_1 = [slice(None)] * d; sl_1[axis] = 1
+    sl_2 = [slice(None)] * d; sl_2[axis] = 2
+    out[tuple(sl_0)] = (theta[tuple(sl_0)] - 2.0 * theta[tuple(sl_1)] + theta[tuple(sl_2)]) / dy2
+
+    # Right boundary: (θ_{n-3} - 2θ_{n-2} + θ_{n-1}) / Δy²
+    sl_n1 = [slice(None)] * d; sl_n1[axis] = n - 1
+    sl_n2 = [slice(None)] * d; sl_n2[axis] = n - 2
+    sl_n3 = [slice(None)] * d; sl_n3[axis] = n - 3
+    out[tuple(sl_n1)] = (theta[tuple(sl_n3)] - 2.0 * theta[tuple(sl_n2)] + theta[tuple(sl_n1)]) / dy2
+
+    return out
+
+
+def _second_deriv_cross(theta: np.ndarray, axis_i: int, axis_j: int,
+                        dy_i: float, dy_j: float) -> np.ndarray:
+    """Compute d²θ/(dy_i dy_j) via central differences (interior), one-sided at boundaries."""
+    d = theta.ndim
+    n_i = theta.shape[axis_i]
+    n_j = theta.shape[axis_j]
+    out = np.empty_like(theta)
+    dydy4 = 4.0 * dy_i * dy_j
+
+    # Interior: central cross stencil
+    # (θ_{i+1,j+1} - θ_{i+1,j-1} - θ_{i-1,j+1} + θ_{i-1,j-1}) / (4 Δy_i Δy_j)
+    def _make_sl(si, sj):
+        sl = [slice(None)] * d
+        sl[axis_i] = si
+        sl[axis_j] = sj
+        return tuple(sl)
+
+    interior_i = slice(1, n_i - 1)
+    interior_j = slice(1, n_j - 1)
+
+    out[_make_sl(interior_i, interior_j)] = (
+        theta[_make_sl(slice(2, n_i), slice(2, n_j))]
+        - theta[_make_sl(slice(2, n_i), slice(0, n_j - 2))]
+        - theta[_make_sl(slice(0, n_i - 2), slice(2, n_j))]
+        + theta[_make_sl(slice(0, n_i - 2), slice(0, n_j - 2))]
+    ) / dydy4
+
+    # Boundaries: use forward/backward differences to approximate d/dy_i and d/dy_j,
+    # then combine.  We compute the full cross-derivative via
+    #   d²θ/(dy_i dy_j) ≈ d/dy_i [dθ/dy_j]
+    # using one-sided first derivatives at boundary rows/columns.
+
+    # Helper: first derivative along one axis (forward or backward)
+    def _d1(arr, ax, dh, side):
+        """First derivative of arr along ax using forward (side=0) or backward (side=-1)."""
+        s0 = [slice(None)] * d
+        s1 = [slice(None)] * d
+        if side == 0:  # forward
+            s0[ax] = 0
+            s1[ax] = 1
+        else:  # backward
+            s0[ax] = -1
+            s1[ax] = -2
+        if side == 0:
+            return (arr[tuple(s1)] - arr[tuple(s0)]) / dh
+        else:
+            return (arr[tuple(s0)] - arr[tuple(s1)]) / dh
+
+    # First compute dθ/dy_j everywhere (central interior, one-sided boundary)
+    dtheta_dj = np.empty_like(theta)
+    sl_p = [slice(None)] * d; sl_p[axis_j] = slice(2, n_j)
+    sl_m = [slice(None)] * d; sl_m[axis_j] = slice(0, n_j - 2)
+    sl_c = [slice(None)] * d; sl_c[axis_j] = slice(1, n_j - 1)
+    dtheta_dj[tuple(sl_c)] = (theta[tuple(sl_p)] - theta[tuple(sl_m)]) / (2.0 * dy_j)
+    sl_0j = [slice(None)] * d; sl_0j[axis_j] = 0
+    sl_1j = [slice(None)] * d; sl_1j[axis_j] = 1
+    dtheta_dj[tuple(sl_0j)] = (theta[tuple(sl_1j)] - theta[tuple(sl_0j)]) / dy_j
+    sl_lj = [slice(None)] * d; sl_lj[axis_j] = n_j - 1
+    sl_pj = [slice(None)] * d; sl_pj[axis_j] = n_j - 2
+    dtheta_dj[tuple(sl_lj)] = (theta[tuple(sl_lj)] - theta[tuple(sl_pj)]) / dy_j
+
+    # Now differentiate dtheta_dj along axis_i for boundary rows of axis_i
+    # Left boundary of axis i (k_i = 0): forward difference
+    sl_i0 = [slice(None)] * d; sl_i0[axis_i] = 0
+    sl_i1 = [slice(None)] * d; sl_i1[axis_i] = 1
+    out[tuple(sl_i0)] = (dtheta_dj[tuple(sl_i1)] - dtheta_dj[tuple(sl_i0)]) / dy_i
+
+    # Right boundary of axis i (k_i = n_i-1): backward difference
+    sl_il = [slice(None)] * d; sl_il[axis_i] = n_i - 1
+    sl_ip = [slice(None)] * d; sl_ip[axis_i] = n_i - 2
+    out[tuple(sl_il)] = (dtheta_dj[tuple(sl_il)] - dtheta_dj[tuple(sl_ip)]) / dy_i
+
+    # Left/right boundary of axis j (but interior of axis i): already covered by
+    # the dtheta_dj one-sided stencil + central diff in axis_i from the interior block.
+    # However, the interior block only filled interior_i x interior_j.
+    # Fill the boundary columns of axis j for interior rows of axis i.
+    sl_j0_ii = [slice(None)] * d; sl_j0_ii[axis_i] = interior_i; sl_j0_ii[axis_j] = 0
+    sl_j1_ii = [slice(None)] * d; sl_j1_ii[axis_i] = interior_i; sl_j1_ii[axis_j] = 1
+
+    # d²θ/(dy_i dy_j) at j=0: central in i, forward in j
+    sl_ip1_j0 = [slice(None)] * d; sl_ip1_j0[axis_i] = slice(2, n_i); sl_ip1_j0[axis_j] = 0
+    sl_ip1_j1 = [slice(None)] * d; sl_ip1_j1[axis_i] = slice(2, n_i); sl_ip1_j1[axis_j] = 1
+    sl_im1_j0 = [slice(None)] * d; sl_im1_j0[axis_i] = slice(0, n_i - 2); sl_im1_j0[axis_j] = 0
+    sl_im1_j1 = [slice(None)] * d; sl_im1_j1[axis_i] = slice(0, n_i - 2); sl_im1_j1[axis_j] = 1
+
+    out[tuple(sl_j0_ii)] = (
+        (theta[tuple(sl_ip1_j1)] - theta[tuple(sl_ip1_j0)]) / dy_j
+        - (theta[tuple(sl_im1_j1)] - theta[tuple(sl_im1_j0)]) / dy_j
+    ) / (2.0 * dy_i)
+
+    sl_jl_ii = [slice(None)] * d; sl_jl_ii[axis_i] = interior_i; sl_jl_ii[axis_j] = n_j - 1
+    sl_jp_ii = [slice(None)] * d; sl_jp_ii[axis_i] = interior_i; sl_jp_ii[axis_j] = n_j - 2
+    sl_ip1_jl = [slice(None)] * d; sl_ip1_jl[axis_i] = slice(2, n_i); sl_ip1_jl[axis_j] = n_j - 1
+    sl_ip1_jp = [slice(None)] * d; sl_ip1_jp[axis_i] = slice(2, n_i); sl_ip1_jp[axis_j] = n_j - 2
+    sl_im1_jl = [slice(None)] * d; sl_im1_jl[axis_i] = slice(0, n_i - 2); sl_im1_jl[axis_j] = n_j - 1
+    sl_im1_jp = [slice(None)] * d; sl_im1_jp[axis_i] = slice(0, n_i - 2); sl_im1_jp[axis_j] = n_j - 2
+
+    out[tuple(sl_jl_ii)] = (
+        (theta[tuple(sl_ip1_jl)] - theta[tuple(sl_ip1_jp)]) / dy_j
+        - (theta[tuple(sl_im1_jl)] - theta[tuple(sl_im1_jp)]) / dy_j
+    ) / (2.0 * dy_i)
+
+    return out
+
+
+def diffusion_term(
+    theta: np.ndarray,
+    y_grids: List[np.ndarray],
+    dy_list: List[float],
+    Sigma: np.ndarray,
+) -> np.ndarray:
+    """Compute ½ Tr(D(y) Sigma D(y) D²_yy theta) at every grid point.
+
+    Parameters
+    ----------
+    theta : d-dimensional array on the inventory grid.
+    y_grids : list of d 1D arrays (grid axes).
+    dy_list : list of d floats (grid spacing per axis).
+    Sigma : (d, d) covariance matrix.
+
+    Returns
+    -------
+    Array same shape as theta.
+    """
+    d = theta.ndim
+    result = np.zeros_like(theta)
+
+    # Precompute broadcasted y arrays
+    y_bc = []
+    for k in range(d):
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_bc.append(y_grids[k][tuple(slices)])
+
+    for i in range(d):
+        for j in range(i, d):
+            sij = Sigma[i, j]
+            if abs(sij) < 1e-30:
+                continue
+
+            if i == j:
+                d2 = _second_deriv_diagonal(theta, i, dy_list[i])
+                result += 0.5 * sij * y_bc[i] * y_bc[i] * d2
+            else:
+                d2 = _second_deriv_cross(theta, i, j, dy_list[i], dy_list[j])
+                # Factor 1: off-diagonal appears twice (i,j) and (j,i) in the
+                # full double sum, but we loop i<j once, so weight is 2 * ½ = 1.
+                result += sij * y_bc[i] * y_bc[j] * d2
+
+    return result
+
+
+def running_penalty(
+    y_grids: List[np.ndarray],
+    Sigma: np.ndarray,
+    gamma: float,
+) -> np.ndarray:
+    """Compute -gamma/2 * y^T Sigma y at every grid point.
+
+    This is a known function of y (no theta dependence) and only needs
+    to be computed once per grid.
+
+    Parameters
+    ----------
+    y_grids : list of d 1D arrays (grid axes).
+    Sigma : (d, d) covariance matrix.
+    gamma : risk aversion parameter.
+
+    Returns
+    -------
+    d-dimensional array on the grid.
+    """
+    d = len(y_grids)
+    shape = tuple(len(g) for g in y_grids)
+    result = np.zeros(shape)
+
+    y_bc = []
+    for k in range(d):
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_bc.append(y_grids[k][tuple(slices)])
+
+    for i in range(d):
+        for j in range(i, d):
+            sij = Sigma[i, j]
+            if abs(sij) < 1e-30:
+                continue
+            if i == j:
+                result += sij * y_bc[i] * y_bc[i]
+            else:
+                result += 2.0 * sij * y_bc[i] * y_bc[j]
+
+    return -0.5 * gamma * result

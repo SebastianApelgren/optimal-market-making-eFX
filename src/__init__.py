@@ -31,4 +31,6 @@ from .pde import (
     HedgingSpec,
     build_hedging_spec,
     hedging_hamiltonian,
+    diffusion_term,
+    running_penalty,
 )
