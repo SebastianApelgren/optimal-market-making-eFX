@@ -483,6 +483,38 @@ def diffusion_term(
     return result
 
 
+def drift_term(
+    grad_theta: List[np.ndarray],
+    y_grids: List[np.ndarray],
+    mu_vec: np.ndarray,
+) -> np.ndarray:
+    """Compute y^T mu + y^T D(mu) nabla_y theta = sum_i mu_i y_i (1 + dtheta/dy_i).
+
+    Parameters
+    ----------
+    grad_theta : list of d arrays, each same shape as the grid.
+        Entry k is d(theta)/d(y_k), e.g. from compute_gradient.
+    y_grids : list of d 1D arrays (grid axes).
+    mu_vec : length-d array of drift coefficients.
+
+    Returns
+    -------
+    Array same shape as grad_theta[0].
+    """
+    d = len(y_grids)
+    result = np.zeros_like(grad_theta[0])
+
+    for k in range(d):
+        if abs(mu_vec[k]) < 1e-30:
+            continue
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_k = y_grids[k][tuple(slices)]
+        result += mu_vec[k] * y_k * (1.0 + grad_theta[k])
+
+    return result
+
+
 def running_penalty(
     y_grids: List[np.ndarray],
     Sigma: np.ndarray,
