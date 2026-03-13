@@ -594,3 +594,380 @@ def terminal_condition(
                 result += 2.0 * kij * y_bc[i] * y_bc[j]
 
     return -result
+
+
+def _diffusion_term_cross(
+    theta: np.ndarray,
+    y_grids: List[np.ndarray],
+    dy_list: List[float],
+    Sigma: np.ndarray,
+) -> np.ndarray:
+    """Compute only the cross-derivative part of the diffusion term.
+
+    Returns Σ_{i<j} Σ_{ij} y_i y_j ∂²θ/(∂y_i ∂y_j).
+    For d=2 with σ_ref=0, this is zero.
+    """
+    d = theta.ndim
+    result = np.zeros_like(theta)
+
+    y_bc = []
+    for k in range(d):
+        slices = [np.newaxis] * d
+        slices[k] = slice(None)
+        y_bc.append(y_grids[k][tuple(slices)])
+
+    for i in range(d):
+        for j in range(i + 1, d):
+            sij = Sigma[i, j]
+            if abs(sij) < 1e-30:
+                continue
+            d2 = _second_deriv_cross(theta, i, j, dy_list[i], dy_list[j])
+            result += sij * y_bc[i] * y_bc[j] * d2
+
+    return result
+
+
+@dataclass(frozen=True)
+class PDESpec:
+    """All precomputed data needed to evaluate the PDE RHS."""
+    quoting: QuotingSpec
+    hedging: HedgingSpec
+    Sigma: np.ndarray       # (d, d) covariance matrix
+    mu_vec: np.ndarray      # (d,) drift vector
+    gamma: float
+    dy_list: List[float]
+    y_grids: List[np.ndarray]
+    penalty: np.ndarray     # precomputed running_penalty (static, no theta dependence)
+
+
+def build_pde_spec(y_grids: List[np.ndarray], mp: ModelParams) -> PDESpec:
+    """One-time setup: build all sub-specs and precompute static arrays."""
+    from .riccati import build_Sigma
+
+    dy_list = validate_pde_grid(y_grids, mp)
+    Sigma = build_Sigma(mp)
+    mu_vec = np.array([mp.mu.get(c, 0.0) for c in mp.currencies], dtype=float)
+
+    quoting = build_quoting_spec(y_grids, mp)
+    hedging = build_hedging_spec(y_grids, mp)
+    penalty = running_penalty(y_grids, Sigma, mp.gamma)
+
+    return PDESpec(
+        quoting=quoting,
+        hedging=hedging,
+        Sigma=Sigma,
+        mu_vec=mu_vec,
+        gamma=mp.gamma,
+        dy_list=dy_list,
+        y_grids=y_grids,
+        penalty=penalty,
+    )
+
+
+def pde_rhs(theta: np.ndarray, spec: PDESpec) -> np.ndarray:
+    """Evaluate the spatial RHS of PDE (1) at every grid point.
+
+    Returns RHS such that dθ/dt = -RHS, i.e. the backward Euler update is
+    θ^{m-1} = θ^m + Δt * RHS.
+    """
+    grad = compute_gradient(theta, spec.dy_list)
+
+    rhs = spec.penalty.copy()                                             # -γ/2 y^T Σ y
+    rhs += diffusion_term(theta, spec.y_grids, spec.dy_list, spec.Sigma)  # ½ Tr(...)
+    rhs += drift_term(grad, spec.y_grids, spec.mu_vec)                    # y^T μ (1+∂θ)
+    rhs += quoting_hamiltonian_integral(theta, spec.quoting)              # Q(y)
+    rhs += hedging_hamiltonian(grad, spec.y_grids, spec.hedging)          # H_hedge(y)
+
+    return rhs
+
+
+def pde_rhs_nonlinear(theta: np.ndarray, spec: PDESpec) -> np.ndarray:
+    """Evaluate the explicit (nonlinear) part of the spatial RHS.
+
+    Includes: penalty, drift, quoting & hedging Hamiltonians, cross diffusion.
+    Excludes: diagonal diffusion along each axis (handled implicitly).
+
+    The full drift y^T μ (1 + ∂θ/∂y) is treated explicitly here. For μ=0
+    (the paper's example) this is zero. For nonzero μ, moving the drift
+    gradient into the implicit operator would improve stability.
+    """
+    grad = compute_gradient(theta, spec.dy_list)
+
+    rhs = spec.penalty.copy()                                             # -γ/2 y^T Σ y
+    rhs += _diffusion_term_cross(theta, spec.y_grids, spec.dy_list, spec.Sigma)
+    rhs += drift_term(grad, spec.y_grids, spec.mu_vec)                    # y^T μ (1+∂θ)
+    rhs += quoting_hamiltonian_integral(theta, spec.quoting)              # Q(y)
+    rhs += hedging_hamiltonian(grad, spec.y_grids, spec.hedging)          # H_hedge(y)
+
+    return rhs
+
+
+# ---------------------------------------------------------------------------
+# Thomas algorithm for tridiagonal systems
+# ---------------------------------------------------------------------------
+
+def _thomas_factor(
+    lower: np.ndarray,
+    diag: np.ndarray,
+    upper: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Precompute forward-sweep factors for the Thomas algorithm.
+
+    Parameters
+    ----------
+    lower, diag, upper : 1D arrays of length n.
+        lower[0] is unused (no x[-1]).
+
+    Returns
+    -------
+    c_prime : modified upper diagonal (length n).
+    denom_inv : 1/denominator at each row (length n).
+    """
+    n = len(diag)
+    c_prime = np.empty(n)
+    denom_inv = np.empty(n)
+
+    denom_inv[0] = 1.0 / diag[0]
+    c_prime[0] = upper[0] * denom_inv[0]
+
+    for i in range(1, n):
+        denom = diag[i] - lower[i] * c_prime[i - 1]
+        denom_inv[i] = 1.0 / denom
+        c_prime[i] = upper[i] * denom_inv[i]
+
+    return c_prime, denom_inv
+
+
+def _thomas_solve_batch(
+    lower: np.ndarray,
+    c_prime: np.ndarray,
+    denom_inv: np.ndarray,
+    rhs: np.ndarray,
+) -> np.ndarray:
+    """Solve tridiagonal system for multiple RHS vectors.
+
+    Parameters
+    ----------
+    lower : 1D, length n (lower[0] unused).
+    c_prime, denom_inv : from _thomas_factor, length n.
+    rhs : (batch, n) array — each row is an independent RHS.
+
+    Returns
+    -------
+    x : (batch, n) solution array.
+    """
+    n = len(c_prime)
+
+    # Forward sweep: compute modified RHS d'
+    d_prime = np.empty_like(rhs)
+    d_prime[:, 0] = rhs[:, 0] * denom_inv[0]
+    for i in range(1, n):
+        d_prime[:, i] = (rhs[:, i] - lower[i] * d_prime[:, i - 1]) * denom_inv[i]
+
+    # Back substitution
+    x = np.empty_like(rhs)
+    x[:, -1] = d_prime[:, -1]
+    for i in range(n - 2, -1, -1):
+        x[:, i] = d_prime[:, i] - c_prime[i] * x[:, i + 1]
+
+    return x
+
+
+# ---------------------------------------------------------------------------
+# Implicit diffusion operator
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class _ImplicitAxisOp:
+    """Precomputed Thomas factors for (I - dt*L_k) along one grid axis."""
+    axis: int
+    lower: np.ndarray       # length n, lower[0] unused
+    c_prime: np.ndarray     # from _thomas_factor
+    denom_inv: np.ndarray   # from _thomas_factor
+
+
+def _build_implicit_ops(
+    spec: PDESpec,
+    dt: float,
+) -> Tuple['_ImplicitAxisOp', ...]:
+    """Build tridiagonal implicit operators for each axis with nonzero diffusion.
+
+    The operator along axis k discretises:
+        L_k[θ]_j = ½ Σ_{kk} y_j² (θ_{j+1} - 2θ_j + θ_{j-1}) / Δy²
+
+    and returns the Thomas factors for (I - dt * L_k).
+    Boundary points (j=0, j=n-1) are identity rows.
+    """
+    ops = []
+    d = len(spec.y_grids)
+
+    for k in range(d):
+        sigma_kk = spec.Sigma[k, k]
+        if sigma_kk < 1e-30:
+            continue
+
+        y = spec.y_grids[k]
+        dy = spec.dy_list[k]
+        n = len(y)
+        dy2 = dy * dy
+
+        lower = np.zeros(n)
+        diag = np.ones(n)
+        upper = np.zeros(n)
+
+        # Interior points j = 1, ..., n-2: central differences
+        y_j = y[1:-1]
+        diff_c = 0.5 * sigma_kk * y_j * y_j / dy2  # ½ Σ_kk y_j² / Δy²
+
+        # (I - dt * L_k):
+        #   lower[j] = -dt * diff_c   (coeff of θ_{j-1})
+        #   diag[j]  = 1 + 2*dt * diff_c  (coeff of θ_j)
+        #   upper[j] = -dt * diff_c   (coeff of θ_{j+1})
+        lower[1:-1] = -dt * diff_c
+        diag[1:-1] = 1.0 + 2.0 * dt * diff_c
+        upper[1:-1] = -dt * diff_c
+
+        c_prime, denom_inv = _thomas_factor(lower, diag, upper)
+        ops.append(_ImplicitAxisOp(
+            axis=k, lower=lower, c_prime=c_prime, denom_inv=denom_inv,
+        ))
+
+    return tuple(ops)
+
+
+def _apply_implicit_step(
+    theta: np.ndarray,
+    ops: Tuple[_ImplicitAxisOp, ...],
+) -> np.ndarray:
+    """Solve (I - dt*L) θ_new = θ by sequential tridiagonal solves per axis."""
+    result = theta
+    for op in ops:
+        # Move target axis to last position, flatten batch dims
+        moved = np.moveaxis(result, op.axis, -1)
+        shape = moved.shape
+        n = shape[-1]
+        rhs_2d = moved.reshape(-1, n)
+
+        sol_2d = _thomas_solve_batch(op.lower, op.c_prime, op.denom_inv, rhs_2d)
+
+        result = np.moveaxis(sol_2d.reshape(shape), -1, op.axis)
+    return result
+
+
+def solve_hjb_explicit(
+    y_grids: List[np.ndarray],
+    mp: ModelParams,
+    n_steps: int = 1000,
+    snapshot_times: List[float] | None = None,
+) -> dict:
+    """Solve PDE (1) backward from T to 0 via explicit Euler.
+
+    Parameters
+    ----------
+    y_grids : list of d 1D arrays (grid axes).
+    mp : ModelParams with T_days, gamma, kappa, etc.
+    n_steps : number of time steps.
+    snapshot_times : optional list of times (in days) at which to save θ.
+        Always saves t=0.
+
+    Returns
+    -------
+    dict with keys:
+        'theta_0'   : θ(0, y), d-dimensional array on the grid.
+        'snapshots' : dict mapping time -> θ(t, y) for requested snapshot_times.
+        'spec'      : the PDESpec used.
+        'dt'        : time step size.
+    """
+    d = len(mp.currencies)
+    kappa = mp.kappa if mp.kappa is not None else np.zeros((d, d))
+    T = mp.T_days
+    dt = T / n_steps
+
+    spec = build_pde_spec(y_grids, mp)
+    theta = terminal_condition(y_grids, kappa)
+
+    # Prepare snapshot collection
+    if snapshot_times is None:
+        snapshot_times = []
+    snap_steps = {}
+    for t_snap in snapshot_times:
+        step_idx = round((T - t_snap) / dt)
+        step_idx = max(0, min(n_steps, step_idx))
+        snap_steps[step_idx] = t_snap
+    snapshots = {}
+
+    # Backward march: step m goes from n_steps down to 1
+    from tqdm import trange
+
+    for m in trange(n_steps, desc="HJB PDE solve", unit="step"):
+        rhs = pde_rhs(theta, spec)
+        theta = theta + dt * rhs
+
+        if (m + 1) in snap_steps:
+            t_snap = snap_steps[m + 1]
+            snapshots[t_snap] = theta.copy()
+
+    return {
+        'theta_0': theta,
+        'snapshots': snapshots,
+        'spec': spec,
+        'dt': dt,
+    }
+
+
+def solve_hjb_semi_implicit(
+    y_grids: List[np.ndarray],
+    mp: ModelParams,
+    n_steps: int = 1000,
+    snapshot_times: List[float] | None = None,
+) -> dict:
+    """Solve PDE (1) backward from T to 0 via IMEX Euler.
+
+    Diagonal diffusion is treated implicitly (tridiagonal solve per axis).
+    All other terms (quoting, hedging, drift, penalty, cross diffusion) are
+    treated explicitly.
+
+    Parameters and return value are identical to solve_hjb_explicit.
+    """
+    d = len(mp.currencies)
+    kappa = mp.kappa if mp.kappa is not None else np.zeros((d, d))
+    T = mp.T_days
+    dt = T / n_steps
+
+    spec = build_pde_spec(y_grids, mp)
+    theta = terminal_condition(y_grids, kappa)
+
+    # Precompute implicit operator (Thomas factors, done once)
+    implicit_ops = _build_implicit_ops(spec, dt)
+
+    # Prepare snapshot collection
+    if snapshot_times is None:
+        snapshot_times = []
+    snap_steps = {}
+    for t_snap in snapshot_times:
+        step_idx = round((T - t_snap) / dt)
+        step_idx = max(0, min(n_steps, step_idx))
+        snap_steps[step_idx] = t_snap
+    snapshots = {}
+
+    # Backward march in τ = T - t
+    from tqdm import trange
+
+    for m in trange(n_steps, desc="HJB PDE solve (IMEX)", unit="step"):
+        # Explicit step: b = θ^m + Δt * N[θ^m]
+        rhs_N = pde_rhs_nonlinear(theta, spec)
+        b = theta + dt * rhs_N
+
+        # Implicit step: solve (I - Δt L) θ^{m+1} = b
+        theta = _apply_implicit_step(b, implicit_ops)
+
+        if (m + 1) in snap_steps:
+            t_snap = snap_steps[m + 1]
+            snapshots[t_snap] = theta.copy()
+
+    return {
+        'theta_0': theta,
+        'snapshots': snapshots,
+        'spec': spec,
+        'dt': dt,
+    }

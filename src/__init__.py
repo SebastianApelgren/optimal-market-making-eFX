@@ -35,4 +35,10 @@ from .pde import (
     diffusion_term,
     running_penalty,
     terminal_condition,
+    PDESpec,
+    build_pde_spec,
+    pde_rhs,
+    pde_rhs_nonlinear,
+    solve_hjb_explicit,
+    solve_hjb_semi_implicit,
 )
