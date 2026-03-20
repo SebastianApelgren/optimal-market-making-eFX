@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Tuple
 
 import numpy as np
@@ -1270,25 +1270,53 @@ def assemble_implicit_system(
         y_i_int = (spec.y_grids[hc.i][1:-1][tuple(sl_i2)] * np.ones(bc_shape)).ravel()
         y_j_int = (spec.y_grids[hc.j][1:-1][tuple(sl_j2)] * np.ones(bc_shape)).ravel()
 
-        # ∂θ/∂y_i coupling (positive sign in p) — central differences
-        coeff_i = (xi_int * (1.0 + hc.k_i * y_i_int)
-                   / (2.0 * spec.dy_list[hc.i]))
+        # Hedging gradient — monotone (M-matrix) differencing
+        #
+        # The linearized hedging adds v·∂θ/∂y to the spatial RHS F[θ].
+        # The implicit system is (I - dt·A)θ = rhs, where A includes
+        # +v·∂/∂y.  For (I - dt·A) to be an M-matrix (non-positive
+        # off-diagonals, dominant diagonal), we need:
+        #   v > 0: forward diff  (θ_{j+1} - θ_j)/dy
+        #          → A[j,j] = -v/dy,  A[j,j+1] = +v/dy
+        #          → (I-dtA)[j,j] = 1+dt·v/dy > 1,  [j,j+1] = -dt·v/dy < 0  ✓
+        #   v < 0: backward diff (θ_j - θ_{j-1})/dy
+        #          → A[j,j] = v/dy,   A[j,j-1] = -v/dy
+        #          → (I-dtA)[j,j] = 1+dt·|v|/dy > 1, [j,j-1] = dt·v/dy < 0  ✓
+        #
+        # Combined entries in (I - dt·A):
+        #   diagonal:  += dt·|v|/dy
+        #   j+1:       -= dt·max(v, 0)/dy   (≤ 0, only for v > 0)
+        #   j-1:       += dt·min(v, 0)/dy   (≤ 0, since min(v,0) ≤ 0)
+
+        # ∂θ/∂y_i coupling: velocity v_i = ξ* · (1 + k_i y_i)
+        v_i = xi_int * (1.0 + hc.k_i * y_i_int)
+        dy_i = spec.dy_list[hc.i]
+        v_i_pos = np.maximum(v_i, 0.0)
+        v_i_neg = np.minimum(v_i, 0.0)
+        rows_list.append(idx_c)
+        cols_list.append(idx_c)
+        vals_list.append(dt * np.abs(v_i) / dy_i)            # diagonal
         rows_list.append(idx_c)
         cols_list.append(idx_c + strides[hc.i])
-        vals_list.append(-dt * coeff_i)
+        vals_list.append(-dt * v_i_pos / dy_i)               # j+1 (≤ 0)
         rows_list.append(idx_c)
         cols_list.append(idx_c - strides[hc.i])
-        vals_list.append(dt * coeff_i)
+        vals_list.append(dt * v_i_neg / dy_i)                # j-1 (≤ 0)
 
-        # ∂θ/∂y_j coupling (negative sign in p) — central differences
-        coeff_j = (-xi_int * (1.0 + hc.k_j * y_j_int)
-                   / (2.0 * spec.dy_list[hc.j]))
+        # ∂θ/∂y_j coupling: velocity v_j = -ξ* · (1 + k_j y_j)
+        v_j = -xi_int * (1.0 + hc.k_j * y_j_int)
+        dy_j = spec.dy_list[hc.j]
+        v_j_pos = np.maximum(v_j, 0.0)
+        v_j_neg = np.minimum(v_j, 0.0)
+        rows_list.append(idx_c)
+        cols_list.append(idx_c)
+        vals_list.append(dt * np.abs(v_j) / dy_j)            # diagonal
         rows_list.append(idx_c)
         cols_list.append(idx_c + strides[hc.j])
-        vals_list.append(-dt * coeff_j)
+        vals_list.append(-dt * v_j_pos / dy_j)               # j+1 (≤ 0)
         rows_list.append(idx_c)
         cols_list.append(idx_c - strides[hc.j])
-        vals_list.append(dt * coeff_j)
+        vals_list.append(dt * v_j_neg / dy_j)                # j-1 (≤ 0)
 
     # --- Assemble sparse matrix ---
     all_rows = np.concatenate(rows_list)
@@ -1394,4 +1422,126 @@ def solve_hjb_implicit(
         'spec': spec,
         'dt': dt,
         'pi_iters': pi_iters,
+    }
+
+
+# ---------------------------------------------------------------------------
+# η-continuation solver
+# ---------------------------------------------------------------------------
+
+def _scale_hedging_eta(spec: PDESpec, eta_scale: float) -> PDESpec:
+    """Return a new PDESpec with η multiplied by eta_scale in all hedging pairs."""
+    new_contribs = tuple(
+        (i, j, psi, eta * eta_scale, k_i, k_j)
+        for (i, j, psi, eta, k_i, k_j) in spec.hedging.contributions
+    )
+    new_hedging = HedgingSpec(contributions=new_contribs, d=spec.hedging.d)
+    return replace(spec, hedging=new_hedging)
+
+
+def solve_hjb_implicit_continuation(
+    y_grids: List[np.ndarray],
+    mp: ModelParams,
+    n_steps: int = 200,
+    eta_schedule: Tuple[float, ...] = (1000, 100, 10, 1),
+    pi_tol: float = 1e-10,
+    pi_max_iter: int = 20,
+    snapshot_times: List[float] | None = None,
+) -> dict:
+    """Solve PDE (1) via implicit Euler with η-continuation at each time step.
+
+    At each time step, the implicit equation is solved multiple times with
+    decreasing η scaling factors.  Each sub-solve initialises policy iteration
+    from the previous sub-solve's converged θ, providing a good initial guess.
+
+    The implicit equation at each time step is always:
+        θ^{m+1} - Δt · F_η[θ^{m+1}] = θ^m
+    where θ^m is the previous time step and F_η is the spatial operator with
+    the current η scaling.  Only the operator changes between sub-solves;
+    θ^m (the RHS) stays the same.
+
+    Parameters
+    ----------
+    eta_schedule : sequence of η scaling factors, from largest (most damped)
+        to smallest.  Must end with 1 (original η).
+        Example: (1000, 100, 10, 1).
+    """
+    import scipy.sparse.linalg
+
+    if eta_schedule[-1] != 1:
+        raise ValueError("eta_schedule must end with 1 (original η)")
+
+    d = len(mp.currencies)
+    kappa = mp.kappa if mp.kappa is not None else np.zeros((d, d))
+    T = mp.T_days
+    dt = T / n_steps
+
+    # Build base spec and scaled variants (quoting spec is shared — only
+    # the hedging η changes).
+    spec_base = build_pde_spec(y_grids, mp)
+    specs = []
+    for s in eta_schedule:
+        if s == 1:
+            specs.append(spec_base)
+        else:
+            specs.append(_scale_hedging_eta(spec_base, s))
+
+    theta = terminal_condition(y_grids, kappa)
+    grid_shape = theta.shape
+
+    # Prepare snapshot collection
+    if snapshot_times is None:
+        snapshot_times = []
+    snap_steps = {}
+    for t_snap in snapshot_times:
+        step_idx = round((T - t_snap) / dt)
+        step_idx = max(0, min(n_steps, step_idx))
+        snap_steps[step_idx] = t_snap
+    snapshots = {}
+
+    pi_iters = []  # total PI iterations per time step (sum across all η levels)
+
+    from tqdm import trange
+
+    for m in trange(n_steps, desc="HJB implicit (η-continuation)", unit="step"):
+        theta_old = theta.copy()  # θ^m — fixed for the entire time step
+        total_pi = 0
+
+        for spec_eta in specs:
+            # PI loop at this η level.
+            # theta carries over from the previous level (warm start).
+            for k_pi in range(pi_max_iter):
+                grad = compute_gradient(theta, spec_eta.dy_list)
+                q_ctrl = extract_quoting_controls(theta, spec_eta)
+                h_ctrl = extract_hedging_controls(
+                    grad, spec_eta.y_grids, spec_eta)
+
+                A, source = assemble_implicit_system(
+                    q_ctrl, h_ctrl, spec_eta, dt)
+                b = theta_old.ravel() + source
+                theta_new = scipy.sparse.linalg.spsolve(
+                    A, b).reshape(grid_shape)
+
+                diff = np.max(np.abs(theta_new - theta))
+                scale = max(1.0, np.max(np.abs(theta_new)))
+                theta = theta_new
+
+                if diff / scale < pi_tol:
+                    break
+
+            total_pi += k_pi + 1
+
+        pi_iters.append(total_pi)
+
+        if (m + 1) in snap_steps:
+            t_snap = snap_steps[m + 1]
+            snapshots[t_snap] = theta.copy()
+
+    return {
+        'theta_0': theta,
+        'snapshots': snapshots,
+        'spec': spec_base,
+        'dt': dt,
+        'pi_iters': pi_iters,
+        'eta_schedule': eta_schedule,
     }

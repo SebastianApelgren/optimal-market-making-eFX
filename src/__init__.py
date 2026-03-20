@@ -47,4 +47,5 @@ from .pde import (
     extract_hedging_controls,
     assemble_implicit_system,
     solve_hjb_implicit,
+    solve_hjb_implicit_continuation,
 )
