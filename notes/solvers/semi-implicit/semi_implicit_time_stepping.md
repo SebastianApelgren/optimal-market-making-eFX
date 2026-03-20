@@ -65,7 +65,7 @@ More precisely: the discrete diffusion operator $\mathcal{L}$ is built from seco
 
 **Why it failed:** The hedging Hamiltonian $\mathcal{H}(p) = (\max(|p| - \psi, 0))^2 / (4\eta)$ is *not* bounded as a functional of $\theta$. The argument $p$ depends on $\nabla\theta$, so $\mathcal{H} \sim |\nabla\theta|^2 / (4\eta)$. With $1/(4\eta) \approx 2.5 \times 10^8$, even small gradients in $\theta$ produce $O(10^8)$ contributions that feed back into $\theta$ on the next step. This is a nonlinear positive feedback loop — not a fixed-eigenvalue problem that implicit diffusion can damp. The diffusion CFL ($\Delta t < 0.69$ days) was never the binding constraint; the hedging stiffness dominates by many orders of magnitude.
 
-The fix requires treating the hedging Hamiltonian implicitly, either via linearisation or full policy iteration — see `implicit_euler_policy_iteration.md`.
+The fix requires treating the hedging Hamiltonian implicitly, either via linearisation or full policy iteration — see `../implicit/implicit_euler_policy_iteration.md`.
 
 
 ## Structure of the linear system

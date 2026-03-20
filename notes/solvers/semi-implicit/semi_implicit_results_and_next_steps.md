@@ -17,7 +17,7 @@ Updated `src/__init__.py` to export `pde_rhs_nonlinear` and `solve_hjb_semi_impl
 
 ### Design decisions
 
-- **Implicit operator = diagonal diffusion only.** No drift gradient (zero for the paper's μ=0), no cross-derivative diffusion (zero for d=2). For d≥3 or μ≠0, the drift gradient and cross terms stay explicit. The drift gradient could be moved implicit for better advection CFL; see `notes/semi_implicit_time_stepping.md`.
+- **Implicit operator = diagonal diffusion only.** No drift gradient (zero for the paper's μ=0), no cross-derivative diffusion (zero for d=2). For d≥3 or μ≠0, the drift gradient and cross terms stay explicit. The drift gradient could be moved implicit for better advection CFL; see `semi_implicit_time_stepping.md`.
 - **Boundary treatment = identity rows.** The first and last grid points (j=0, j=n-1) are not modified by the implicit step — they pass through from the explicit RHS. This is acceptable because they lie in the 50 M$ buffer zone ($|y| > 100$ M$ region of interest). The one-sided FD stencils used elsewhere would break the tridiagonal bandwidth.
 - **Thomas algorithm in pure numpy** (no scipy dependency). Python loop over 301 grid points, vectorized over 301 batch slices. About 20 steps/s for the 301×301 grid.
 - **Sequential axis application for d≥3.** When multiple axes have nonzero diffusion, the tridiagonal solves are applied sequentially (Lie splitting). This introduces an $O(\Delta t^2)$ splitting error, acceptable for our first-order-in-time scheme.

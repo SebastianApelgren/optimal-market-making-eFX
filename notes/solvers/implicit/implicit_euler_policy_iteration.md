@@ -2,7 +2,7 @@
 
 ## Motivation
 
-The semi-implicit (IMEX) Euler scheme treats diffusion implicitly and the Hamiltonians explicitly. As documented in `notes/semi_implicit_results_and_next_steps.md`, this does not cure the stiffness because the binding constraint is the hedging Hamiltonian's nonlinear gain $1/(4\eta) \approx 2.5 \times 10^8$, not the diffusion. The IMEX scheme requires the same $\eta \times 1000$ scaling as fully explicit Euler.
+The semi-implicit (IMEX) Euler scheme treats diffusion implicitly and the Hamiltonians explicitly. As documented in `../semi-implicit/semi_implicit_results_and_next_steps.md`, this does not cure the stiffness because the binding constraint is the hedging Hamiltonian's nonlinear gain $1/(4\eta) \approx 2.5 \times 10^8$, not the diffusion. The IMEX scheme requires the same $\eta \times 1000$ scaling as fully explicit Euler.
 
 The paper (p.6) states they used a "monotone implicit Euler scheme" for the $d = 2$ PDE validation. This is a **fully implicit** scheme where the nonlinear HJB equation at each time step is solved via policy iteration (Howard's algorithm). Policy iteration linearizes the HJB by alternating between fixing the control policy and solving the resulting linear PDE. It converges quadratically (equivalent to Newton's method) and typically requires only 2-5 inner iterations per time step.
 

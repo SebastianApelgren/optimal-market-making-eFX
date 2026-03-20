@@ -107,8 +107,61 @@ This is first-order accurate in space (vs second-order for central differences),
 Changed `assemble_implicit_system` in `src/pde.py` to use this monotone differencing for the hedging gradient terms.
 
 
-## 7. Next: retest with monotone scheme + continuation
+## 7. Testing monotone scheme + continuation
 
-With the M-matrix discretisation, the sparse solve should produce well-conditioned results at each PI step. The η-continuation then provides the good initial guesses that PI needs to converge quickly. Both pieces are needed:
-- Monotone scheme → each PI step is well-conditioned
-- Continuation → PI starts close to the answer at each η level
+### Test with schedule (10, 5, 2, 1), PI_TOL = 1e-6
+
+The η×10 and η×5 levels converge fast (6-9 PI), but η×2 and η×1 hit 50 PI without converging to 1e-6. However, `theta(0,0)` is fully stable — it doesn't change between PI iteration 5 and 50. The remaining ~2.5e-5 rel_diff is at the grid boundary where the first-order upwind stencil is less accurate. The continuation warm-start is working (θ barely changes between η levels: 5.767e-4 → 5.782e-4 → 5.818e-4 → 5.858e-4), but PI stalls before reaching the tolerance.
+
+### Test with schedule (1,) — no continuation, monotone scheme only
+
+The monotone scheme alone is stable with original η. No blowup, no NaN, no singular matrices. Values match the continuation run exactly (`theta(0,0)` = 5.858e-4 at step 0 in both cases). The continuation was not needed — the M-matrix property was the key fix.
+
+**Conclusion: the η-continuation is unnecessary for stability.** The monotone differencing is sufficient. The continuation is dropped from further tests.
+
+
+## 8. PI convergence analysis
+
+With PI_TOL = 1e-6, PI stalls at ~2.5e-5 rel_diff (oscillating, never reaching tolerance). Detailed iteration trace for step 0:
+
+```
+PI 1:  rel_diff = 3.6e-2     theta(0,0) = -1.047e-3
+PI 2:  rel_diff = 1.6e-2     theta(0,0) =  3.907e-4
+PI 3:  rel_diff = 6.3e-3     theta(0,0) =  4.981e-4
+PI 4:  rel_diff = 1.7e-3     theta(0,0) =  5.659e-4
+PI 5:  rel_diff = 2.8e-4     theta(0,0) =  5.843e-4
+PI 10: rel_diff = 2.4e-5     theta(0,0) =  5.858e-4   ← converged in value
+PI 50: rel_diff = 2.7e-5     theta(0,0) =  5.858e-4   ← rel_diff stalled
+```
+
+PI converges the value function in ~5 iterations. The residual stalls at ~2.5e-5 due to the first-order spatial accuracy of the upwind scheme at boundary/buffer points. `theta(0,0)` is identical from iteration 5 onward — the remaining rel_diff is at the grid edges and doesn't affect the solution in the region of interest.
+
+**Fix: set PI_TOL = 1e-4.** This is above the stall level, so PI converges in:
+- Step 0: 7 iterations (cold start from θ(T) = 0)
+- Steps 1+: 2-4 iterations (warm-started from previous step)
+- Some late steps (15-19): up to 16-50 iterations as the solution evolves further
+
+20-step run with PI_TOL = 1e-4 completes in ~9 minutes on 301×301 grid.
+
+
+## 9. First PDE vs ODE comparison (original η, 20 time steps)
+
+With 20 steps (dt = 2.5e-3 days), PI_TOL = 1e-4, original η:
+
+**Value function along EUR axis (y_USD = 0):**
+- PDE and ODE curves are visually indistinguishable in [-100, 100]
+- Max |θ_PDE - θ_ODE| = 1.09e-4 (after shifting ODE by C₀ to match at origin)
+- θ(0,0) = 1.059e-2
+
+**Difference pattern:**
+- Smooth, symmetric, non-negative: PDE > ODE everywhere
+- Peaks at |y_EUR| ≈ 75 M$ with magnitude ~1.1e-4
+- Minimum near y = 0 (~0) and y = ±50 (~0)
+- Relative difference: ~1.1e-4 / 1.06e-2 ≈ 1%
+
+**Physical interpretation:** The ODE uses the quadratic Taylor approximation Ĥ(p) ≈ α₀ + α₁p + ½α₂p², which underestimates the true Hamiltonian H(p) at large |p| (large inventory). The exact H from the PDE captures the full nonlinear structure, giving a slightly higher value function — the market maker extracts slightly more value from quoting at extreme inventories than the quadratic approximation predicts. The ~1% correction confirms that the ODE approximation is quite accurate for the paper's parameter set.
+
+**Remaining work:**
+- Run with more time steps (200) for better time discretisation accuracy
+- Compare optimal quotes and hedge rates (policy comparison), not just value functions
+- Investigate the late-step PI slowdown (steps 15-19 need more iterations)

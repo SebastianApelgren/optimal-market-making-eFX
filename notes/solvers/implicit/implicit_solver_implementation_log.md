@@ -12,7 +12,7 @@ Implemented a fully implicit Euler solver with policy iteration (Howard's algori
 
 ## Why: motivation for the implicit solver
 
-The semi-implicit (IMEX) Euler scheme (documented in `semi_implicit_results_and_next_steps.md`) treats diffusion implicitly and the Hamiltonians explicitly. Testing showed it provides no improvement over fully explicit Euler:
+The semi-implicit (IMEX) Euler scheme (documented in `../semi-implicit/semi_implicit_results_and_next_steps.md`) treats diffusion implicitly and the Hamiltonians explicitly. Testing showed it provides no improvement over fully explicit Euler:
 
 - The binding stability constraint is the hedging Hamiltonian's nonlinear gain $1/(4\eta) \approx 2.5 \times 10^8$, not the diffusion
 - With the paper's original $\eta = 10^{-9}$ (decimal), the explicit Hamiltonians cause blowup within ~9 time steps
