@@ -22,11 +22,11 @@ The goal is to solve this without the quadratic ansatz $\hat\theta = -y^\top A y
 
 ## Time stepping: explicit Euler
 
-We march backward from $t = T$ to $t = 0$. Defining $\text{RHS}(\theta)$ as the sum of all spatial terms, the update is:
+We march forward in backward time $\tau = T - t$, from $\tau = 0$ (terminal) to $\tau = T$ (initial). Defining $\text{RHS}(\theta)$ as the sum of all spatial terms, the PDE becomes $\partial_\tau \theta = \text{RHS}(\theta)$, and the explicit Euler update is:
 
-$$\theta^{m-1} = \theta^m + \Delta t \cdot \text{RHS}(\theta^m)$$
+$$\theta^{m+1} = \theta^m + \Delta t \cdot \text{RHS}(\theta^m)$$
 
-where $m$ indexes time steps from $M$ (terminal) down to $1$.
+where $m = 0, 1, \ldots, N_t - 1$ indexes time steps forward in $\tau$.
 
 **Why explicit Euler?** It is the simplest scheme to implement and debug. Each time step is a single evaluation of the RHS — no linear systems, no iteration. This makes it easy to verify each spatial operator independently before worrying about solver convergence. The plan is to upgrade to semi-implicit or fully implicit schemes later if needed.
 
@@ -87,7 +87,11 @@ This is not a bug — it reflects genuine stiffness in the PDE. The paper used a
 
 **Diffusion and drift terms:** Use one-sided finite difference stencils at boundary points (forward at left, backward at right), already implemented in `compute_gradient`, `_second_deriv_diagonal`, and `_second_deriv_cross`.
 
-**No Dirichlet pinning:** All grid points (including boundaries) are evolved with the same explicit Euler update. No values are pinned to the ODE solution or any other prescribed function. This keeps the solver self-contained and avoids coupling to the Riccati approximation.
+**No Dirichlet pinning:** No values are pinned to the ODE solution or any other prescribed function. This keeps the solver self-contained and avoids coupling to the Riccati approximation.
+
+**Explicit solver:** All grid points (including boundaries) are evolved with the same explicit Euler update using one-sided stencils at the edges.
+
+**Implicit/semi-implicit solvers:** Boundary points use **identity rows** in the implicit system — they are not modified by the implicit step and pass through from the explicit RHS (or remain at their previous value plus source terms). This simplifies the tridiagonal structure and avoids one-sided stencils in the implicit matrix. The boundary source terms (penalty etc.) are zeroed out to prevent boundary values from drifting. The net effect is that boundary values are approximately frozen near the terminal condition.
 
 **Why this works:** If $Y_{\max}$ is large enough, the solution in the interior is insensitive to the boundary values. The 50 M\$ buffer was chosen to ensure this. If boundary artifacts are observed, the first remedy is to increase $Y_{\max}$; the second is to pin boundary values to the ODE ansatz.
 

@@ -55,15 +55,17 @@ $$\boxed{\bigl(I - \Delta t\,\mathcal{L}\bigr)\,\theta^{m+1} \;=\; \theta^m \;+\
 The right-hand side is known (it only involves $\theta^m$). The left-hand side is a **linear system** $A\,\theta^{m+1} = b$ where $A = I - \Delta t\,\mathcal{L}$ is a sparse matrix that depends only on the grid geometry and model parameters — it can be **precomputed once** before the time loop.
 
 
-## Why this cures the stiffness
+## Why this was expected to cure the stiffness (but didn't)
 
-The stiff part of the PDE is $\mathcal{H}_{\text{hedge}}$, which lives in $\mathcal{N}$. At first glance, treating it explicitly seems to leave the stiffness problem unsolved. But this is not true:
+The reasoning below motivated the IMEX approach. It turned out to be **wrong in practice** — see `semi_implicit_results_and_next_steps.md` for the actual results. The argument is preserved here to document the thinking and where it broke down.
 
-The instability in pure explicit Euler arises from the **coupling** between the diffusion (which smooths $\theta$) and the Hamiltonians (which sharpen $\theta$). When diffusion is treated implicitly, it provides unconditional damping of high-frequency modes at each time step. This damping counteracts the amplification from the explicit Hamiltonian evaluation, stabilising the scheme for moderate $\Delta t$.
+The idea was: implicit diffusion provides unconditional damping of high-frequency modes, which should counteract the amplification from the explicit Hamiltonian evaluation, stabilising the scheme for moderate $\Delta t$.
 
-More precisely: the discrete diffusion operator $\mathcal{L}$ is built from second derivatives ($\partial_{yy}$), whose eigenvalues are negative: $\lambda_k < 0$. In an explicit forward-$\tau$ scheme the amplification factor is $|1 + \Delta t \lambda_k|$, which exceeds 1 when $\Delta t |\lambda_k| > 2$ — hence the CFL constraint. In the IMEX scheme, the implicit treatment gives amplification $|1/(1 - \Delta t \lambda_k)| = 1/(1 + \Delta t |\lambda_k|) < 1$ for all $\lambda_k < 0$ and all $\Delta t > 0$ — unconditional stability for the linear part. The explicit Hamiltonian contributions are bounded (they don't have eigenvalues that grow with grid refinement the way the Laplacian does), so the overall scheme is stable under a much milder CFL condition governed by the Hamiltonian terms alone rather than the diffusion.
+More precisely: the discrete diffusion operator $\mathcal{L}$ is built from second derivatives ($\partial_{yy}$), whose eigenvalues are negative: $\lambda_k < 0$. In an explicit forward-$\tau$ scheme the amplification factor is $|1 + \Delta t \lambda_k|$, which exceeds 1 when $\Delta t |\lambda_k| > 2$ — hence the CFL constraint. In the IMEX scheme, the implicit treatment gives amplification $|1/(1 - \Delta t \lambda_k)| = 1/(1 + \Delta t |\lambda_k|) < 1$ for all $\lambda_k < 0$ and all $\Delta t > 0$ — unconditional stability for the linear part. The original hope was that the explicit Hamiltonian contributions would be "bounded" in the sense of not having eigenvalues that grow with grid refinement.
 
-If this turns out not to be enough (i.e. the hedging Hamiltonian is still too stiff for explicit treatment), the next upgrade would be to linearise $\mathcal{H}_{\text{hedge}}$ around $\theta^m$ and absorb it into the implicit part — effectively a single Newton step per time level — but we try the simpler IMEX first.
+**Why it failed:** The hedging Hamiltonian $\mathcal{H}(p) = (\max(|p| - \psi, 0))^2 / (4\eta)$ is *not* bounded as a functional of $\theta$. The argument $p$ depends on $\nabla\theta$, so $\mathcal{H} \sim |\nabla\theta|^2 / (4\eta)$. With $1/(4\eta) \approx 2.5 \times 10^8$, even small gradients in $\theta$ produce $O(10^8)$ contributions that feed back into $\theta$ on the next step. This is a nonlinear positive feedback loop — not a fixed-eigenvalue problem that implicit diffusion can damp. The diffusion CFL ($\Delta t < 0.69$ days) was never the binding constraint; the hedging stiffness dominates by many orders of magnitude.
+
+The fix requires treating the hedging Hamiltonian implicitly, either via linearisation or full policy iteration — see `implicit_euler_policy_iteration.md`.
 
 
 ## Structure of the linear system

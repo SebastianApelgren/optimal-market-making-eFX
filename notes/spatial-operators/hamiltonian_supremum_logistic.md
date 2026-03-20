@@ -74,7 +74,7 @@ where $W_0$ is the principal (real, non-negative) branch.
 |----------|------------|
 | Optimal quote $\delta^*(p)$ | $p + \dfrac{W_0(e^{-(1+\alpha+\beta p)}) + 1}{\beta}$ |
 | Fill probability $f(\delta^*)$ | $\dfrac{W_0(e^{-(1+\alpha+\beta p)})}{W_0(e^{-(1+\alpha+\beta p)}) + 1}$ |
-| Hamiltonian $H(z,p)$ | $\lambda(z) \cdot \dfrac{W_0(e^{-(1+\alpha+\beta p)})}{\beta}$ |
+| Hamiltonian $H(z,p)/\lambda(z)$ | $\dfrac{W_0(e^{-(1+\alpha+\beta p)})}{\beta}$ |
 
 **Verification.** $f(\delta^*)(\delta^* - p) = \frac{w}{w+1} \cdot \frac{w+1}{\beta} = \frac{w}{\beta}$. Consistent.
 
@@ -95,8 +95,16 @@ $$
 where $w = W_0(e^{-(1+\alpha+\beta p)})$ throughout. These give the quadratic approximation coefficients (Eq. 4 in [1]):
 
 $$
+\hat{H}^{n,i,j}(z,p) = \alpha_0(z) + \alpha_1(z)\,p + \tfrac{1}{2}\,\alpha_2(z)\,p^2,
+$$
+
+with
+
+$$
 \alpha_0 = H(z,0), \quad \alpha_1 = \partial_p H(z,0), \quad \alpha_2 = \partial_{pp} H(z,0).
 $$
+
+Note: the $\tfrac{1}{2}$ is explicit in the quadratic form, so $\alpha_2$ is the full second derivative, not half of it.
 
 ## Numerical Methods
 

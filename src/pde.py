@@ -971,3 +971,427 @@ def solve_hjb_semi_implicit(
         'spec': spec,
         'dt': dt,
     }
+
+
+# ---------------------------------------------------------------------------
+# Fully implicit Euler with policy iteration (Howard's algorithm)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class QuotingControl:
+    """Optimal quoting control for one contribution."""
+    delta_star: np.ndarray  # on overlap sub-grid
+    f_star: np.ndarray      # on overlap sub-grid
+    z: float
+    lam: float
+    src_sl: tuple
+    dst_sl: tuple
+
+
+@dataclass(frozen=True)
+class HedgingControl:
+    """Optimal hedging control for one canonical pair."""
+    xi_star: np.ndarray  # on full grid
+    psi: float
+    eta: float
+    i: int
+    j: int
+    k_i: float
+    k_j: float
+
+
+def extract_quoting_controls(
+    theta: np.ndarray,
+    spec: PDESpec,
+) -> List[QuotingControl]:
+    """Compute optimal markup and fill probability for each quoting contribution.
+
+    For each (pair, tier, size) contribution, evaluates the momentum
+    p(y) = (θ(y) - θ(y + z·d)) / z and computes δ*(y), f*(y) via Lambert W.
+    """
+    controls = []
+    for (z, lam, alpha, beta, src_sl, dst_sl) in spec.quoting.contributions:
+        p = (theta[dst_sl] - theta[src_sl]) / z
+        _, delta_star, f_star = H_logistic(p, alpha, beta)
+        controls.append(QuotingControl(
+            delta_star=delta_star, f_star=f_star,
+            z=z, lam=lam, src_sl=src_sl, dst_sl=dst_sl,
+        ))
+    return controls
+
+
+def extract_hedging_controls(
+    grad_theta: List[np.ndarray],
+    y_grids: List[np.ndarray],
+    spec: PDESpec,
+) -> List[HedgingControl]:
+    """Compute optimal hedge rate for each hedging pair.
+
+    For each canonical pair (i, j), evaluates the momentum
+    p = (1+k_i y_i)∇θ_i - (1+k_j y_j)∇θ_j + k_i y_i - k_j y_j
+    and computes ξ* = sign(p)·max(|p|-ψ, 0) / (2η).
+    """
+    d = spec.hedging.d
+    y_bc = []
+    for k in range(d):
+        sl = [np.newaxis] * d
+        sl[k] = slice(None)
+        y_bc.append(y_grids[k][tuple(sl)])
+
+    controls = []
+    for (i, j, psi, eta, k_i, k_j) in spec.hedging.contributions:
+        p = (grad_theta[i] - grad_theta[j]
+             + k_i * y_bc[i] * (1.0 + grad_theta[i])
+             - k_j * y_bc[j] * (1.0 + grad_theta[j]))
+        excess = np.maximum(np.abs(p) - psi, 0.0)
+        xi_star = np.sign(p) * excess / (2.0 * eta)
+        controls.append(HedgingControl(
+            xi_star=xi_star, psi=psi, eta=eta,
+            i=i, j=j, k_i=k_i, k_j=k_j,
+        ))
+    return controls
+
+
+def assemble_implicit_system(
+    quoting_controls: List[QuotingControl],
+    hedging_controls: List[HedgingControl],
+    spec: PDESpec,
+    dt: float,
+) -> Tuple:
+    """Build sparse matrix (I - dt·A) and source vector for the linearized system.
+
+    With fixed controls (δ*, ξ*), the HJB becomes the linear system:
+        (I - dt·A) θ^{k+1} = θ^m + dt·source
+
+    Returns (A_csr, source_flat) where A_csr is a scipy CSR matrix of shape
+    (N, N) and source_flat is a 1D array of length N.
+    """
+    import scipy.sparse
+
+    grid_shape = tuple(len(g) for g in spec.y_grids)
+    d = len(grid_shape)
+    N = int(np.prod(grid_shape))
+    strides = np.array([int(np.prod(grid_shape[k+1:])) for k in range(d)])
+    flat_idx = np.arange(N).reshape(grid_shape)
+
+    rows_list: List[np.ndarray] = []
+    cols_list: List[np.ndarray] = []
+    vals_list: List[np.ndarray] = []
+    source = np.zeros(N)
+
+    # --- Identity diagonal ---
+    all_idx = np.arange(N)
+    rows_list.append(all_idx)
+    cols_list.append(all_idx)
+    vals_list.append(np.ones(N))
+
+    # --- Penalty source (static, no θ dependence) — all points incl. boundary ---
+    source += dt * spec.penalty.ravel()
+
+    # Interior mask: True at points where all axes are away from the boundary.
+    # Non-penalty source terms are restricted to interior points (Option A).
+    interior = np.ones(grid_shape, dtype=bool)
+    for k in range(d):
+        sl = [slice(None)] * d
+        sl[k] = 0
+        interior[tuple(sl)] = False
+        sl = [slice(None)] * d
+        sl[k] = grid_shape[k] - 1
+        interior[tuple(sl)] = False
+    interior_flat = interior.ravel()
+
+    # --- Drift source: Σ_k μ_k y_k (interior only) ---
+    for k in range(d):
+        if abs(spec.mu_vec[k]) < 1e-30:
+            continue
+        sl = [np.newaxis] * d
+        sl[k] = slice(None)
+        y_k = spec.y_grids[k][tuple(sl)] * np.ones(grid_shape)
+        source[interior_flat] += dt * spec.mu_vec[k] * y_k.ravel()[interior_flat]
+
+    # --- Diagonal diffusion: ½ Σ_kk y_k² ∂²θ/∂y_k² ---
+    for k in range(d):
+        sigma_kk = spec.Sigma[k, k]
+        if sigma_kk < 1e-30:
+            continue
+        dy2 = spec.dy_list[k] ** 2
+        n_k = grid_shape[k]
+
+        # Interior points along axis k
+        int_sl = [slice(None)] * d
+        int_sl[k] = slice(1, n_k - 1)
+        idx_c = flat_idx[tuple(int_sl)].ravel()
+
+        # Coefficient: 0.5 * Σ_kk * y_k² / Δy²
+        y_k_int = spec.y_grids[k][1:-1]
+        bc_shape = [grid_shape[l] if l != k else n_k - 2 for l in range(d)]
+        sl = [np.newaxis] * d
+        sl[k] = slice(None)
+        coeff = (0.5 * sigma_kk / dy2) * (
+            y_k_int[tuple(sl)] ** 2 * np.ones(bc_shape)
+        ).ravel()
+
+        # (I - dt·A) entries: diag += 2·dt·coeff, off-diag = -dt·coeff
+        rows_list.append(idx_c)
+        cols_list.append(idx_c)
+        vals_list.append(2.0 * dt * coeff)
+
+        rows_list.append(idx_c)
+        cols_list.append(idx_c + strides[k])
+        vals_list.append(-dt * coeff)
+
+        rows_list.append(idx_c)
+        cols_list.append(idx_c - strides[k])
+        vals_list.append(-dt * coeff)
+
+    # --- Cross diffusion: Σ_{ij} y_i y_j ∂²θ/(∂y_i ∂y_j) for i < j ---
+    for ki in range(d):
+        for kj in range(ki + 1, d):
+            sij = spec.Sigma[ki, kj]
+            if abs(sij) < 1e-30:
+                continue
+            n_i, n_j = grid_shape[ki], grid_shape[kj]
+            int_sl = [slice(None)] * d
+            int_sl[ki] = slice(1, n_i - 1)
+            int_sl[kj] = slice(1, n_j - 1)
+            idx_c = flat_idx[tuple(int_sl)].ravel()
+
+            bc_shape = [
+                grid_shape[l] if l != ki and l != kj
+                else (n_i - 2 if l == ki else n_j - 2)
+                for l in range(d)
+            ]
+            sl_i = [np.newaxis] * d
+            sl_i[ki] = slice(None)
+            sl_j = [np.newaxis] * d
+            sl_j[kj] = slice(None)
+            coeff = (sij / (4.0 * spec.dy_list[ki] * spec.dy_list[kj])) * (
+                spec.y_grids[ki][1:-1][tuple(sl_i)]
+                * spec.y_grids[kj][1:-1][tuple(sl_j)]
+                * np.ones(bc_shape)
+            ).ravel()
+
+            si, sj = strides[ki], strides[kj]
+            rows_list.append(idx_c)
+            cols_list.append(idx_c + si + sj)
+            vals_list.append(-dt * coeff)
+            rows_list.append(idx_c)
+            cols_list.append(idx_c + si - sj)
+            vals_list.append(dt * coeff)
+            rows_list.append(idx_c)
+            cols_list.append(idx_c - si + sj)
+            vals_list.append(dt * coeff)
+            rows_list.append(idx_c)
+            cols_list.append(idx_c - si - sj)
+            vals_list.append(-dt * coeff)
+
+    # --- Drift gradient (linear: μ_k y_k ∂θ/∂y_k) ---
+    for k in range(d):
+        mu_k = spec.mu_vec[k]
+        if abs(mu_k) < 1e-30:
+            continue
+        n_k = grid_shape[k]
+        int_sl = [slice(None)] * d
+        int_sl[k] = slice(1, n_k - 1)
+        idx_c = flat_idx[tuple(int_sl)].ravel()
+
+        y_k_int = spec.y_grids[k][1:-1]
+        bc_shape = [grid_shape[l] if l != k else n_k - 2 for l in range(d)]
+        sl = [np.newaxis] * d
+        sl[k] = slice(None)
+        coeff = (mu_k / (2.0 * spec.dy_list[k])) * (
+            y_k_int[tuple(sl)] * np.ones(bc_shape)
+        ).ravel()
+
+        rows_list.append(idx_c)
+        cols_list.append(idx_c + strides[k])
+        vals_list.append(-dt * coeff)
+        rows_list.append(idx_c)
+        cols_list.append(idx_c - strides[k])
+        vals_list.append(dt * coeff)
+
+    # --- Quoting (fixed controls) ---
+    for qc in quoting_controls:
+        idx_here = flat_idx[qc.dst_sl].ravel()
+        idx_shifted = flat_idx[qc.src_sl].ravel()
+        lam_f = qc.lam * qc.f_star.ravel()
+
+        # (I - dt·A): diagonal += dt·λ·f*, off-diag = -dt·λ·f*
+        rows_list.append(idx_here)
+        cols_list.append(idx_here)
+        vals_list.append(dt * lam_f)
+
+        rows_list.append(idx_here)
+        cols_list.append(idx_shifted)
+        vals_list.append(-dt * lam_f)
+
+        # Source: dt · z · λ · f* · δ* (interior only)
+        contrib = dt * qc.z * qc.lam * qc.f_star.ravel() * qc.delta_star.ravel()
+        mask = interior_flat[idx_here]
+        np.add.at(source, idx_here[mask], contrib[mask])
+
+    # --- Hedging (fixed controls) ---
+    for hc in hedging_controls:
+        # Source (interior only): ξ*(k_i y_i - k_j y_j) - ψ|ξ*| - η(ξ*)²
+        xi_flat = hc.xi_star.ravel()
+        sl_i = [np.newaxis] * d
+        sl_i[hc.i] = slice(None)
+        sl_j = [np.newaxis] * d
+        sl_j[hc.j] = slice(None)
+        y_i_full = (spec.y_grids[hc.i][tuple(sl_i)] * np.ones(grid_shape)).ravel()
+        y_j_full = (spec.y_grids[hc.j][tuple(sl_j)] * np.ones(grid_shape)).ravel()
+
+        hedge_src = dt * (
+            xi_flat * (hc.k_i * y_i_full - hc.k_j * y_j_full)
+            - hc.psi * np.abs(xi_flat)
+            - hc.eta * xi_flat * xi_flat
+        )
+        source[interior_flat] += hedge_src[interior_flat]
+
+        # Matrix entries at interior points (central differences for gradient)
+        n_i, n_j = grid_shape[hc.i], grid_shape[hc.j]
+        int_sl = [slice(None)] * d
+        int_sl[hc.i] = slice(1, n_i - 1)
+        int_sl[hc.j] = slice(1, n_j - 1)
+        int_sl_t = tuple(int_sl)
+
+        idx_c = flat_idx[int_sl_t].ravel()
+        xi_int = hc.xi_star[int_sl_t].ravel()
+
+        bc_shape = [
+            grid_shape[l] if l != hc.i and l != hc.j
+            else (n_i - 2 if l == hc.i else n_j - 2)
+            for l in range(d)
+        ]
+        sl_i2 = [np.newaxis] * d
+        sl_i2[hc.i] = slice(None)
+        sl_j2 = [np.newaxis] * d
+        sl_j2[hc.j] = slice(None)
+        y_i_int = (spec.y_grids[hc.i][1:-1][tuple(sl_i2)] * np.ones(bc_shape)).ravel()
+        y_j_int = (spec.y_grids[hc.j][1:-1][tuple(sl_j2)] * np.ones(bc_shape)).ravel()
+
+        # ∂θ/∂y_i coupling (positive sign in p) — central differences
+        coeff_i = (xi_int * (1.0 + hc.k_i * y_i_int)
+                   / (2.0 * spec.dy_list[hc.i]))
+        rows_list.append(idx_c)
+        cols_list.append(idx_c + strides[hc.i])
+        vals_list.append(-dt * coeff_i)
+        rows_list.append(idx_c)
+        cols_list.append(idx_c - strides[hc.i])
+        vals_list.append(dt * coeff_i)
+
+        # ∂θ/∂y_j coupling (negative sign in p) — central differences
+        coeff_j = (-xi_int * (1.0 + hc.k_j * y_j_int)
+                   / (2.0 * spec.dy_list[hc.j]))
+        rows_list.append(idx_c)
+        cols_list.append(idx_c + strides[hc.j])
+        vals_list.append(-dt * coeff_j)
+        rows_list.append(idx_c)
+        cols_list.append(idx_c - strides[hc.j])
+        vals_list.append(dt * coeff_j)
+
+    # --- Assemble sparse matrix ---
+    all_rows = np.concatenate(rows_list)
+    all_cols = np.concatenate(cols_list)
+    all_vals = np.concatenate(vals_list)
+
+    A = scipy.sparse.coo_matrix(
+        (all_vals, (all_rows, all_cols)), shape=(N, N),
+    ).tocsr()
+
+    return A, source
+
+
+def solve_hjb_implicit(
+    y_grids: List[np.ndarray],
+    mp: ModelParams,
+    n_steps: int = 1000,
+    snapshot_times: List[float] | None = None,
+    pi_tol: float = 1e-10,
+    pi_max_iter: int = 20,
+) -> dict:
+    """Solve PDE (1) backward from T to 0 via fully implicit Euler
+    with policy iteration (Howard's algorithm).
+
+    At each time step, the nonlinear implicit equation is solved by
+    iterating: (1) fix controls from current θ, (2) solve the resulting
+    linear system for the new θ, until convergence.
+
+    Parameters
+    ----------
+    y_grids : list of d 1D arrays (grid axes).
+    mp : ModelParams with T_days, gamma, kappa, etc.
+    n_steps : number of time steps.
+    snapshot_times : optional list of times (in days) at which to save θ.
+    pi_tol : policy iteration convergence tolerance (relative l-inf).
+    pi_max_iter : maximum policy iterations per time step.
+
+    Returns
+    -------
+    dict with keys:
+        'theta_0'   : θ(0, y), d-dimensional array on the grid.
+        'snapshots' : dict mapping time -> θ(t, y) for requested snapshot_times.
+        'spec'      : the PDESpec used.
+        'dt'        : time step size.
+        'pi_iters'  : list of policy iteration counts per time step.
+    """
+    import scipy.sparse.linalg
+
+    d = len(mp.currencies)
+    kappa = mp.kappa if mp.kappa is not None else np.zeros((d, d))
+    T = mp.T_days
+    dt = T / n_steps
+
+    spec = build_pde_spec(y_grids, mp)
+    theta = terminal_condition(y_grids, kappa)
+    grid_shape = theta.shape
+
+    # Prepare snapshot collection
+    if snapshot_times is None:
+        snapshot_times = []
+    snap_steps = {}
+    for t_snap in snapshot_times:
+        step_idx = round((T - t_snap) / dt)
+        step_idx = max(0, min(n_steps, step_idx))
+        snap_steps[step_idx] = t_snap
+    snapshots = {}
+
+    pi_iters = []
+
+    from tqdm import trange
+
+    for m in trange(n_steps, desc="HJB PDE solve (implicit)", unit="step"):
+        theta_old = theta.copy()
+
+        for k_pi in range(pi_max_iter):
+            # Step A: extract optimal controls from current θ
+            grad = compute_gradient(theta, spec.dy_list)
+            q_ctrl = extract_quoting_controls(theta, spec)
+            h_ctrl = extract_hedging_controls(grad, spec.y_grids, spec)
+
+            # Step B: assemble and solve linearized system
+            A, source = assemble_implicit_system(q_ctrl, h_ctrl, spec, dt)
+            b = theta_old.ravel() + source
+            theta_new = scipy.sparse.linalg.spsolve(A, b).reshape(grid_shape)
+
+            # Check convergence
+            diff = np.max(np.abs(theta_new - theta))
+            scale = max(1.0, np.max(np.abs(theta_new)))
+            theta = theta_new
+
+            if diff / scale < pi_tol:
+                break
+
+        pi_iters.append(k_pi + 1)
+
+        if (m + 1) in snap_steps:
+            t_snap = snap_steps[m + 1]
+            snapshots[t_snap] = theta.copy()
+
+    return {
+        'theta_0': theta,
+        'snapshots': snapshots,
+        'spec': spec,
+        'dt': dt,
+        'pi_iters': pi_iters,
+    }

@@ -102,8 +102,8 @@ At each time step, instead of evaluating the nonlinear Hamiltonians at $\theta^m
 
 2. **Solve the resulting LINEAR PDE** for $\theta^{m+1}$:
    - With fixed controls, the HJB PDE becomes a linear PDE (no supremum/infimum)
-   - The quoting term becomes: $\sum \lambda f(\delta^*)((\delta^* - p)\theta^{m+1})$ → linear in $\theta^{m+1}$ through p
-   - The hedging term becomes: $\sum (\xi^* p - L(\xi^*))$ where $p$ depends linearly on $\nabla\theta^{m+1}$
+   - The quoting term becomes: $\sum \lambda f(\delta^*)\bigl(\delta^* - p(\theta^{m+1})\bigr)$, where $p(\theta) = (\theta(y) - \theta(y + z\,d_{ij}))/z$ is linear in $\theta$
+   - The hedging term becomes: $\sum \bigl(\xi^* \cdot p(\nabla\theta^{m+1}) - L(\xi^*)\bigr)$, where $p$ depends linearly on $\nabla\theta^{m+1}$
    - This linear PDE can be solved implicitly via a sparse linear system
 
 3. **Iterate**: recompute the policy from $\theta^{m+1}$, re-solve, until convergence (usually 2-5 iterations per time step).

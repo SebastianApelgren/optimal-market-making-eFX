@@ -51,12 +51,12 @@ Standard second-order central difference (3-point stencil):
 
 $$\frac{\partial^2\theta}{\partial y_i^2}\bigg|_k \;\approx\; \frac{\theta_{...,k+1,...} - 2\,\theta_{...,k,...} + \theta_{...,k-1,...}}{\Delta y_i^2}$$
 
-At boundaries, one-sided second-order stencils:
+At boundaries, one-sided stencils:
 
 - Left ($k = 0$): $\;\frac{\theta_0 - 2\theta_1 + \theta_2}{\Delta y_i^2}$
 - Right ($k = n-1$): $\;\frac{\theta_{n-3} - 2\theta_{n-2} + \theta_{n-1}}{\Delta y_i^2}$
 
-These are the same 3-point formula shifted to use only interior-side points, preserving second-order accuracy.
+These are the same 3-point formula shifted to use only interior-side points. The boundary stencils are $O(\Delta y)$ (first-order), compared to $O(\Delta y^2)$ for the interior central formula. This is acceptable since boundary points lie in the buffer zone where solution accuracy is not critical.
 
 ### Cross-derivative: $\partial^2\theta / (\partial y_i\,\partial y_j)$
 

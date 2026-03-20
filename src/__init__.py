@@ -41,4 +41,10 @@ from .pde import (
     pde_rhs_nonlinear,
     solve_hjb_explicit,
     solve_hjb_semi_implicit,
+    QuotingControl,
+    HedgingControl,
+    extract_quoting_controls,
+    extract_hedging_controls,
+    assemble_implicit_system,
+    solve_hjb_implicit,
 )
