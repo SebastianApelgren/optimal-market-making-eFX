@@ -100,16 +100,22 @@ Treat diffusion implicitly, Hamiltonians explicitly. This was tried before the f
 
 | Topic | File |
 |-------|------|
-| General PDE design (grid, domain, boundary) | `hjb_pde_solver_design.md` |
-| Figure 1 discrepancy investigation | `figure1_investigation.md` |
-| Quoting Hamiltonian integral | `spatial-operators/pde_quoting_integral_design.md` |
-| Hamiltonian supremum (Lambert W) | `spatial-operators/hamiltonian_supremum_logistic.md` |
-| Hedging Hamiltonian | `spatial-operators/hedging_hamiltonian.md` |
-| Diffusion term | `spatial-operators/diffusion_term.md` |
-| Drift term | `spatial-operators/drift_term.md` |
-| Terminal condition | `spatial-operators/terminal_condition.md` |
-| Semi-implicit design | `solvers/semi-implicit/semi_implicit_time_stepping.md` |
-| Semi-implicit results | `solvers/semi-implicit/semi_implicit_results_and_next_steps.md` |
-| Implicit solver design (PI) | `solvers/implicit/implicit_euler_policy_iteration.md` |
-| Implicit solver implementation log | `solvers/implicit/implicit_solver_implementation_log.md` |
-| η-continuation and monotone scheme | `solvers/implicit/eta_continuation_and_monotone_scheme.md` |
+| **Shared** | |
+| Grid, domain, boundary treatment | `grid_and_domain.md` |
+| Figure 1 discrepancy investigation | `../figure1_investigation.md` |
+| **Spatial operators** | |
+| Quoting Hamiltonian integral | `../spatial-operators/pde_quoting_integral_design.md` |
+| Hamiltonian supremum (Lambert W) | `../spatial-operators/hamiltonian_supremum_logistic.md` |
+| Hedging Hamiltonian | `../spatial-operators/hedging_hamiltonian.md` |
+| Diffusion term | `../spatial-operators/diffusion_term.md` |
+| Drift term | `../spatial-operators/drift_term.md` |
+| Terminal condition | `../spatial-operators/terminal_condition.md` |
+| **Explicit Euler** | |
+| Explicit solver design + CFL | `explicit_euler.md` |
+| **Semi-implicit (IMEX)** | |
+| IMEX design | `semi-implicit/semi_implicit_time_stepping.md` |
+| IMEX results (didn't help) | `semi-implicit/semi_implicit_results_and_next_steps.md` |
+| **Implicit + policy iteration** | |
+| Implicit solver design (PI) | `implicit/implicit_euler_policy_iteration.md` |
+| Implementation log | `implicit/implicit_solver_implementation_log.md` |
+| η-continuation and monotone scheme | `implicit/eta_continuation_and_monotone_scheme.md` |

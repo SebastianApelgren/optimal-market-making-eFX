@@ -1,4 +1,7 @@
-# HJB PDE Solver — Design Notes
+# PDE Grid, Domain, and Boundary Treatment
+
+Shared setup used by all solvers (explicit, semi-implicit, implicit).
+
 
 ## The PDE
 
@@ -20,51 +23,6 @@ with terminal condition $\theta(T, y) = -y^\top \kappa\, y$ and:
 The goal is to solve this without the quadratic ansatz $\hat\theta = -y^\top A y - y^\top B - C$ used in the Riccati ODE approximation (Eq. 4-5). This captures the true nonlinear structure of the value function, especially at large inventories where the Taylor expansion of $H$ around $p=0$ breaks down.
 
 
-## Time stepping: explicit Euler
-
-We march forward in backward time $\tau = T - t$, from $\tau = 0$ (terminal) to $\tau = T$ (initial). Defining $\text{RHS}(\theta)$ as the sum of all spatial terms, the PDE becomes $\partial_\tau \theta = \text{RHS}(\theta)$, and the explicit Euler update is:
-
-$$\theta^{m+1} = \theta^m + \Delta t \cdot \text{RHS}(\theta^m)$$
-
-where $m = 0, 1, \ldots, N_t - 1$ indexes time steps forward in $\tau$.
-
-**Why explicit Euler?** It is the simplest scheme to implement and debug. Each time step is a single evaluation of the RHS — no linear systems, no iteration. This makes it easy to verify each spatial operator independently before worrying about solver convergence. The plan is to upgrade to semi-implicit or fully implicit schemes later if needed.
-
-**Possible future upgrades:**
-- Semi-implicit (operator splitting): treat diffusion implicitly, Hamiltonians explicitly. Removes the diffusion CFL constraint.
-- Fully implicit + policy iteration (Howard's algorithm): the approach the paper used for their d=2 validation. Most robust but most complex.
-
-
-## CFL stability constraint
-
-For explicit Euler, the time step must satisfy the CFL condition. The most restrictive term is typically the diffusion:
-
-$$\Delta t < \frac{\Delta y^2}{\sigma^2 \, Y_{\max}^2}$$
-
-This arises because the diffusion coefficient is $\tfrac{1}{2} y_i^2 \sigma_i^2$, which is largest at the grid boundary $y_i = Y_{\max}$.
-
-With the chosen parameters ($\sigma_{\text{EUR}} = 80$ bps $= 0.008$ per $\sqrt{\text{day}}$, $Y_{\max} = 150$ M\$, $\Delta y = 1$ M\$):
-
-$$\Delta t < \frac{1}{0.008^2 \times 150^2} = \frac{1}{1.44} \approx 0.69 \text{ days}$$
-
-This is very generous — the diffusion CFL is not the binding constraint here because inventory volatility in M\$ units is modest ($\sigma \cdot Y_{\max} \approx 1.2$ M\$/day$^{1/2}$).
-
-The Hamiltonian terms may impose tighter (empirical) constraints, but with $\Delta t = 5 \times 10^{-5}$ days and 1000 time steps over $T = 0.05$ days, we have a large safety margin.
-
-
-### Hedging Hamiltonian stiffness (discovered during implementation)
-
-The initial CFL analysis above only considered the diffusion term. In practice, **the hedging Hamiltonian is the binding stability constraint** and makes explicit Euler unusable with the paper's parameters.
-
-The hedging Hamiltonian is $H^{i,j}(p) = (\max(|p| - \psi, 0))^2 / (4\eta)$. For EURUSD, $\eta = 10^{-5} \text{ bps} \times 10^{-4} = 10^{-9}$ in decimal units. This means $H \sim p^2 / (4 \times 10^{-9}) \approx 2.5 \times 10^8 \, p^2$, which amplifies gradients of $\theta$ by a factor of $\sim 10^8$. The resulting positive feedback loop causes numerical blow-up regardless of how small $\Delta t$ is chosen.
-
-This is not a bug — it reflects genuine stiffness in the PDE. The paper used an implicit scheme ("monotone implicit Euler") precisely because of this.
-
-**Workaround for initial development:** We scale $\eta$ up by a factor (e.g., $\times 1000$) to make explicit Euler stable. This lets us validate the spatial discretization (quoting Hamiltonian, diffusion, drift) independently of the time-stepping scheme. The artificially large $\eta$ reduces the hedging Hamiltonian's gain, making explicit time stepping feasible.
-
-**Future upgrade path:** Replace explicit Euler with a semi-implicit scheme that treats the hedging Hamiltonian implicitly while keeping the other terms explicit. This removes the stiffness constraint entirely and allows use of the paper's original parameters.
-
-
 ## Grid and domain
 
 | Parameter | Value | Rationale |
@@ -74,7 +32,6 @@ This is not a bug — it reflects genuine stiffness in the PDE. The paper used a
 | Grid points/axis | 301 | $[-150, 150]$ with spacing 1 |
 | Region of interest | $\pm 100$ M\$ | Matches the paper's Figures 1-2 |
 | $T$ | 0.05 days (72 min) | Paper's value; long enough for stationarity |
-| $N_t$ | 1000 | $\Delta t = 5 \times 10^{-5}$ days $\approx$ 4.3 seconds |
 
 **Why $\Delta y = 1$?** The paper's trade sizes are $\{1, 5, 10, 20, 50\}$ M\$. The quoting Hamiltonian evaluates $\theta(y + z_k d_{ij})$, which must land on a grid node. With $\Delta y = 1$, all sizes are exact multiples — no interpolation needed.
 
@@ -83,7 +40,7 @@ This is not a bug — it reflects genuine stiffness in the PDE. The paper used a
 
 ## Boundary treatment
 
-**Quoting Hamiltonian:** No explicit boundary condition needed. When the shifted lookup $y + z_k d_{ij}$ falls outside $\Omega$, that contribution is set to $H = 0$ (the market maker doesn't quote that size at that inventory). This is an implicit inventory limit — see `notes/pde_quoting_integral_design.md` for details.
+**Quoting Hamiltonian:** No explicit boundary condition needed. When the shifted lookup $y + z_k d_{ij}$ falls outside $\Omega$, that contribution is set to $H = 0$ (the market maker doesn't quote that size at that inventory). This is an implicit inventory limit — see `../spatial-operators/pde_quoting_integral_design.md` for details.
 
 **Diffusion and drift terms:** Use one-sided finite difference stencils at boundary points (forward at left, backward at right), already implemented in `compute_gradient`, `_second_deriv_diagonal`, and `_second_deriv_cross`.
 
