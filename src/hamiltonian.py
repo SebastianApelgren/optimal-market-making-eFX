@@ -17,12 +17,21 @@ def _lambert_w0_newton(x, tol=1e-12, max_iter=8):
     """Compute W_0(x) for x >= 0 via Newton iteration on w*e^w = x.
 
     Works on both scalars and numpy arrays.
+    For very large x (> e^500), uses the asymptotic approximation W(x) ≈ ln(x).
     """
     x = np.asarray(x, dtype=float)
+    BIG = 1e200
+    big = x > BIG
     w = np.where(x < 1.0, x, np.log(1.0 + x))
+    if np.any(big):
+        w = np.where(big, np.where(np.isinf(x), x, np.log(x)), w)
     for _ in range(max_iter):
+        if np.all(big):
+            break
         ew = np.exp(w)
-        dw = (w * ew - x) / (ew * (w + 1.0))
+        denom = ew * (w + 1.0)
+        safe = (~big) & (denom != 0.0)
+        dw = np.where(safe, (w * ew - x) / denom, 0.0)
         w = w - dw
         if np.all(np.abs(dw) < tol):
             break
@@ -30,16 +39,37 @@ def _lambert_w0_newton(x, tol=1e-12, max_iter=8):
 
 
 def optimal_delta_logistic(p, alpha, beta):
-    """Compute delta_bar(p) = argmax_delta f(delta)*(delta-p) via Lambert W."""
-    x = np.exp(-(1.0 + alpha + beta * p))
+    """Compute delta_bar(p) = argmax_delta f(delta)*(delta-p) via Lambert W.
+
+    Overflow-safe: for very negative p, arg = -(1+α+βp) is large and
+    exp(arg) overflows.  In that regime W(x) ≈ arg, so
+    δ* = p + (W+1)/β ≈ p + (arg+1)/β → -α/β.
+    """
+    arg = -(1.0 + alpha + beta * np.asarray(p, dtype=float))
+    safe_arg = np.minimum(arg, 700.0)
+    x = np.exp(safe_arg)
     w = _lambert_w0_newton(x)
+    overflow = arg > 700.0
+    w = np.where(overflow, arg, w)
     return p + (w + 1.0) / beta
 
 
 def H_logistic(p, alpha, beta):
-    """Return (H(p), delta_bar(p), f(delta_bar(p))) via Lambert W."""
-    x = np.exp(-(1.0 + alpha + beta * p))
+    """Return (H(p), delta_bar(p), f(delta_bar(p))) via Lambert W.
+
+    Overflow-safe: for very negative p, arg = -(1+α+βp) is large and
+    exp(arg) overflows.  In that regime W(x) ≈ arg, so:
+      H = W/β ≈ arg/β
+      δ* = p + (W+1)/β ≈ p + (arg+1)/β
+      f* = W/(W+1) → 1  (fill probability saturates)
+    """
+    p = np.asarray(p, dtype=float)
+    arg = -(1.0 + alpha + beta * p)
+    safe_arg = np.minimum(arg, 700.0)
+    x = np.exp(safe_arg)
     w = _lambert_w0_newton(x)
+    overflow = arg > 700.0
+    w = np.where(overflow, arg, w)
     delta_star = p + (w + 1.0) / beta
     f_star = w / (w + 1.0)
     H = w / beta
