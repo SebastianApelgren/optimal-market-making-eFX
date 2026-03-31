@@ -8,11 +8,11 @@ This project is based on the work of Barzykin, Bergault, and Guéant [1], who fo
 
 ### Thesis Structure
 
-1. **Model and ODE approximation.** Present the multi-currency market making model and the quadratic ansatz that reduces the HJB PDE to a system of matrix Riccati ODEs. Reproduce the paper's results (Table 1, Figures 1-2).
+1. **Model and ODE approximation.** Present the multi-currency market making model and the quadratic ansatz that reduces the HJB PDE to a system of matrix Riccati ODEs. Reproduce the paper's results (Table 1, Figures 1-2). *(Complete.)*
 
-2. **Sensitivity analysis on the ODE system.** Study how the optimal strategy depends on model parameters (risk aversion, volatility, correlations, order flow intensities, hedging costs). Identify which parameters the solution is most sensitive to.
+2. **Sensitivity analysis / UQ on the ODE system.** Study how the optimal strategy depends on model parameters (risk aversion, volatility, correlations, order flow intensities, hedging costs). Identify which parameters the solution is most sensitive to and how uncertain they are. *(Active — next major work.)*
 
-3. **Grid-based PDE solver.** Solve the full HJB PDE numerically using finite differences with fully implicit Euler and policy iteration (Howard's algorithm). Compare against the ODE approximation to quantify the error of the quadratic ansatz.
+3. **Grid-based PDE solver.** Solve the full HJB PDE numerically using finite differences with fully implicit Euler and policy iteration (Howard's algorithm). Compare against the ODE approximation to quantify the error of the quadratic ansatz. PDE vs ODE agreement is ~1% for the paper's parameters. *(Complete.)*
 
 4. **Connecting sensitivity to the full problem.** If PDE ≈ ODE across parameter variations, the ODE sensitivity analysis extends to the full nonlinear problem.
 

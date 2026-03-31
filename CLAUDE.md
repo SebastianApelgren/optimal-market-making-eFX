@@ -5,7 +5,11 @@
 Master thesis: numerical methods for optimal multi-currency market making in eFX.
 Based on Barzykin, Bergault, Guéant (2023), arXiv:2207.04100v4 (in `references/`).
 
-Thesis structure: model → ODE approximation → sensitivity analysis on ODE → PDE solver → PDE vs ODE comparison → extend ODE sensitivity results to the full problem.
+Thesis structure:
+1. Model and ODE approximation (complete)
+2. Sensitivity analysis / UQ on ODE parameters (active — next major work)
+3. PDE solver, PDE vs ODE comparison (complete)
+4. Connect ODE sensitivity results to the full problem via PDE validation
 
 ## Environment
 
