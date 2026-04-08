@@ -1,0 +1,116 @@
+\documentclass[a4paper, 12pt, oneside]{book}
+
+% --- Encoding and fonts ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% --- Language ---
+\usepackage[english]{babel}
+
+% --- Math ---
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+
+% --- Graphics and figures ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+
+% --- Tables ---
+\usepackage{booktabs}
+
+% --- Colors and hyperlinks ---
+\usepackage[dvipsnames]{xcolor}
+\usepackage[
+  colorlinks=true,
+  linkcolor=NavyBlue,
+  citecolor=ForestGreen,
+  urlcolor=BrickRed
+]{hyperref}
+
+% --- Bibliography ---
+\usepackage[
+  backend=biber,
+  style=numeric,
+  sorting=nyt,
+  maxbibnames=99
+]{biblatex}
+\addbibresource{references.bib}
+
+% --- Page layout ---
+\usepackage[
+  top=2.5cm,
+  bottom=2.5cm,
+  left=3cm,
+  right=2.5cm
+]{geometry}
+
+% --- Line spacing ---
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Headers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Chapter styling (clean look) ---
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{40pt}
+
+% --- Theorem environments (if needed) ---
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+% --- Custom commands (add your own here) ---
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\T}{\mathsf{T}}  % transpose
+
+% ============================================================
+\begin{document}
+
+% --- Front matter ---
+\frontmatter
+
+\input{chapters/titlepage}
+
+\input{chapters/abstract}
+
+\tableofcontents
+
+% \listoffigures
+% \listoftables
+
+% --- Main matter ---
+\mainmatter
+
+\input{chapters/introduction}
+%\input{chapters/model}
+%\input{chapters/ode}
+%\input{chapters/sensitivity}
+%\input{chapters/pde}
+%\input{chapters/conclusion}
+
+% --- Back matter ---
+\backmatter
+
+\printbibliography[heading=bibintro, title={References}]
+
+% \appendix
+% \input{chapters/appendix}
+
+\end{document}
