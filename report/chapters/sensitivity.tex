@@ -1,0 +1,276 @@
+\chapter{Sensitivity Analysis and Uncertainty Quantification}
+\label{ch:sensitivity}
+
+The ODE approximation developed in Chapter~\ref{ch:ode} provides an efficient way to compute the optimal market making strategy for a given set of model parameters. In practice, however, these parameters are not known exactly. Exchange rate volatilities fluctuate from day to day, client arrival rates depend on market conditions, the logistic demand parameters are fitted from historical fill data via regression and carry estimation error, and the execution cost coefficients are inherently difficult to calibrate. Meanwhile, the risk aversion parameter $\gamma$ is a subjective design choice with no single correct value. A natural question is therefore: how sensitive is the optimal strategy to changes in these parameters, and how does parameter uncertainty propagate to the quantities that a market maker cares about?
+
+In this chapter, we address these questions through a systematic sensitivity analysis and forward uncertainty quantification study. We use variance-based global sensitivity analysis, specifically Sobol indices \cite{sobol2001}, to decompose the output variance into contributions from individual parameters and their interactions. We then propagate the full parameter uncertainty forward through the model to obtain the probability distributions of the key strategy outputs. Together, these two analyses identify which parameters most strongly influence the optimal strategy, which can be safely fixed at nominal values, and how robust the model's prescriptions are under realistic parameter uncertainty.
+
+We work with the two-currency case (USD, EUR), which is the simplest non-trivial setting with one currency pair. This keeps the parameter count manageable at eight, the results easy to visualize, and the setup directly compatible with the two-dimensional PDE solver developed in Chapter~\ref{ch:pde}, which will later serve as an independent validation of the ODE-based conclusions. Extension to three or more currencies would introduce additional sensitivity dimensions, notably cross-pair correlations, that do not arise in the two-currency case; this is discussed briefly in Chapter~\ref{ch:conclusion}.
+
+
+\section{Setup}
+\label{sec:sa-setup}
+
+\subsection{Parameters under study}
+
+We study eight parameters of the two-currency (USD, EUR) model, using the values from Table~1 of \cite{barzykin2023} as the nominal baseline. Table~\ref{tab:sa-params} lists the parameters, their nominal values, and the ranges over which they are varied. All parameters are sampled from independent uniform distributions on their respective ranges.
+
+\begin{table}[ht]
+\centering
+\caption{Parameters varied in the sensitivity analysis. Nominal values correspond to the EUR/USD pair from Table~1 of \cite{barzykin2023}. Ranges are chosen to reflect realistic uncertainty around the nominal.}
+\label{tab:sa-params}
+\begin{tabular}{@{}llcc@{}}
+\toprule
+Parameter & Symbol & Nominal & Range \\
+\midrule
+EUR volatility & $\sigma_{\text{EUR}}$ & 80\,bps & $[56, 104]$\,bps \\
+Risk aversion & $\gamma$ & 20 & $[10, 40]$ \\
+Arrival rate scale & $\lambda_{\text{scale}}$ & 1.0 & $[0.5, 1.5]$ \\
+Logistic shift (tier 1) & $\alpha_1$ & $-1.9$ & $[-2.5, -1.3]$ \\
+Logistic shift (tier 2) & $\alpha_2$ & $-0.3$ & $[-0.9, 0.3]$ \\
+Logistic slope (tier 1) & $\beta_1$ & $11 \times 10^4$ & $[7.7, 14.3] \times 10^4$ \\
+Logistic slope (tier 2) & $\beta_2$ & $3.5 \times 10^4$ & $[2.45, 4.55] \times 10^4$ \\
+Execution cost (quadratic) & $\eta$ & $10^{-5}$\,bps & $[0.5, 2.0] \times 10^{-5}$\,bps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The rationale for these choices is as follows. The volatility $\sigma_{\text{EUR}}$, arrival rate scale $\lambda_{\text{scale}}$, and demand curve parameters $(\alpha_n, \beta_n)$ are all estimated from market data and carry genuine estimation uncertainty. Volatility varies from day to day; arrival rates depend on market conditions; and the logistic parameters are fitted from historical fill-or-reject data via logistic regression and are never known exactly. The risk aversion $\gamma$ is a design choice by the trading desk, but since it is typically tuned rather than derived from first principles, treating it as uncertain captures the sensitivity of the strategy to this subjective choice. The quadratic execution cost $\eta$, which governs market impact in the hedging channel, is notoriously difficult to estimate in practice.
+
+The arrival rates for the five trade sizes ($z \in \{1, 5, 10, 20, 50\}$\,M\$) are not varied independently but are scaled by a single multiplier $\lambda_{\text{scale}}$. This reflects the realistic scenario that overall market activity rises or falls broadly, rather than that small trades become more frequent while large trades become less frequent. In contrast, the logistic parameters $(\alpha_n, \beta_n)$ are varied independently for each tier, since the two tiers represent fundamentally different client segments with separate calibrations.
+
+Several parameters are held fixed at their nominal values: the linear execution cost $\psi$ (set by the execution desk, relatively well known, and enters the model only through a simple thresholding effect on the hedge rate), the terminal penalty $\kappa$ (set to zero in the paper's example), the time horizon $T = 0.05$\,days (a design parameter, not uncertain in the same sense), the drift $\mu$ (zero in the paper's example), and the exogenous trade rates $k_i$ (negligibly small in the paper's calibration). These parameters are expected to have at most a local and easily understood effect on the strategy, and excluding them keeps the sensitivity analysis focused.
+
+
+\subsection{Quantities of interest}
+\label{sec:sa-qois}
+
+For each parameter sample, we solve the Riccati ODE system (see Chapter~\ref{ch:ode}) and extract three scalar quantities of interest (QoIs) that probe different aspects of the optimal strategy:
+
+\begin{enumerate}
+  \item \textbf{Neutral spread} $\delta^*(y = 0)$: the optimal markup at zero inventory for tier~1 at trade size $z = 1$\,M\$. This is the base bid-ask spread that the market maker quotes when carrying no inventory risk. It determines the per-trade profitability under normal conditions.
+
+  \item \textbf{Inventory skew} $\delta^*(y = 10) - \delta^*(y = 0)$: the change in the optimal markup when the market maker holds 10\,M\$ in EUR, relative to the flat-inventory case. This measures the strategy's responsiveness to inventory risk. Parameters that affect the curvature of the value function, such as $\gamma$ and $\sigma$, are expected to dominate here.
+
+  \item \textbf{Hedge rate} $\xi^*(y = 10)$: the optimal hedging rate when holding 10\,M\$ in EUR. This measures how aggressively the model hedges residual inventory through the dealer-to-dealer market. It depends directly on the execution cost $\eta$ and on the value function gradient, which is influenced by all parameters that affect inventory risk.
+\end{enumerate}
+
+These three QoIs are deterministic given the ODE solution --- they require no Monte Carlo simulation and therefore introduce no sampling noise into the sensitivity analysis. They probe complementary aspects of the strategy: quoting behavior (QoIs~1--2) versus hedging behavior (QoI~3), and the flat-inventory regime (QoI~1) versus the regime under inventory pressure (QoIs~2--3). A key question is whether these different aspects are sensitive to the same or different parameters.
+
+
+\section{Methodology}
+\label{sec:sa-methodology}
+
+\subsection{Sobol indices}
+
+We use variance-based global sensitivity analysis to quantify how much of the output variance in each QoI is attributable to each input parameter. The framework, introduced by Sobol \cite{sobol2001} and developed in detail by Saltelli et al.\ \cite{saltelli2008}, decomposes the variance of a model output $Y = g(X_1, \ldots, X_k)$ into contributions from individual inputs and their interactions.
+
+The \emph{first-order Sobol index} $S_i$ measures the fraction of the total output variance that is due to parameter $X_i$ alone, averaging over all other parameters:
+\begin{equation}
+\label{eq:sobol-first}
+S_i = \frac{\operatorname{Var}_{X_i}\!\bigl(\E_{X_{\sim i}}[Y \mid X_i]\bigr)}{\operatorname{Var}(Y)},
+\end{equation}
+where $X_{\sim i}$ denotes the vector of all parameters except $X_i$. If $S_i$ is large, the parameter $X_i$ has a strong individual effect on the output.
+
+The \emph{total-effect index} $S_{T_i}$ captures all contributions to the output variance that involve parameter $X_i$, whether individually or through interactions with other parameters:
+\begin{equation}
+\label{eq:sobol-total}
+S_{T_i} = 1 - \frac{\operatorname{Var}_{X_{\sim i}}\!\bigl(\E_{X_i}[Y \mid X_{\sim i}]\bigr)}{\operatorname{Var}(Y)}.
+\end{equation}
+If $S_{T_i} \approx 0$, the parameter $X_i$ has no effect on the output, neither individually nor through interactions, and can be safely fixed at any value within its range. If $S_{T_i} \gg S_i$, the parameter participates in important interactions.
+
+For a model that is perfectly additive (no interactions), the first-order indices sum to one: $\sum_i S_i = 1$. When interactions are present, $\sum_i S_i < 1$ and $\sum_i S_{T_i} > 1$, since the interaction contributions are counted once per participating parameter in the total-effect indices.
+
+
+\subsection{Estimation procedure}
+
+We estimate the Sobol indices using the Monte Carlo procedure of Saltelli et al.\ \cite{saltelli2010}, with the total-effect estimator of Jansen \cite{jansen1999}. The algorithm proceeds as follows.
+
+\begin{enumerate}
+  \item Draw two independent sample matrices $\mathbf{A}$ and $\mathbf{B}$ of shape $(N, k)$, where $N$ is the number of base samples and $k = 8$ is the number of parameters. Each row is drawn uniformly from the parameter ranges in Table~\ref{tab:sa-params}.
+
+  \item For each parameter $i = 1, \ldots, k$, construct the matrix $\mathbf{C}_i$ by taking $\mathbf{A}$ and replacing its $i$-th column with the corresponding column from $\mathbf{B}$.
+
+  \item Evaluate the model at all $N(k + 2)$ sample points: the $N$ rows of $\mathbf{A}$, the $N$ rows of $\mathbf{B}$, and the $N$ rows of each $\mathbf{C}_i$.
+
+  \item Compute the first-order and total-effect indices from the sample covariances:
+  \begin{align}
+  \label{eq:sobol-estimators}
+  S_i &= \frac{\frac{1}{N} \sum_{j=1}^{N} g(\mathbf{B}_j)\bigl(g(\mathbf{C}_i^{(j)}) - g(\mathbf{A}_j)\bigr)}{\widehat{\operatorname{Var}}(Y)}, \\[4pt]
+  S_{T_i} &= \frac{\frac{1}{2N} \sum_{j=1}^{N} \bigl(g(\mathbf{A}_j) - g(\mathbf{C}_i^{(j)})\bigr)^2}{\widehat{\operatorname{Var}}(Y)},
+  \end{align}
+  where $\widehat{\operatorname{Var}}(Y)$ is the sample variance computed over the combined $\mathbf{A}$ and $\mathbf{B}$ evaluations.
+\end{enumerate}
+
+We use $N = 10{,}000$, giving a total of $10{,}000 \times (8 + 2) = 100{,}000$ model evaluations. Each evaluation solves the Riccati ODE with 500 time steps, which takes approximately 7\,ms, for a total computation time of about 12 minutes. We verified that the ODE solver with 500 steps agrees with a 2000-step solution to machine precision for all three QoIs, confirming that the time discretization error is negligible relative to the parameter-induced variation. This approach has previously been applied to ODE-based models in a similar setting; see \cite{jakobsson2023, piazzola2021} for applications to epidemiological models.
+
+
+\subsection{Forward uncertainty quantification}
+
+After identifying the important parameters through the Sobol analysis, we characterize the full output distributions by propagating the parameter uncertainty forward through the model. Rather than generating new samples, we reuse the $2N = 20{,}000$ evaluations from the Sobol computation (the $\mathbf{A}$ and $\mathbf{B}$ matrices), which are already drawn from the uniform prior distributions.
+
+For each QoI, we estimate the probability density function using Gaussian kernel density estimation with Silverman's rule for bandwidth selection. We report the mean, standard deviation, and 90\% credible interval (5th to 95th percentile) of each output distribution, and compare these to the nominal values obtained at the baseline parameter set.
+
+
+\section{Results: Sobol indices}
+\label{sec:sa-results}
+
+Tables~\ref{tab:sobol-qoi1}--\ref{tab:sobol-qoi3} report the first-order and total-effect Sobol indices for each QoI. The results reveal a striking pattern: different aspects of the optimal strategy are sensitive to entirely different parameters.
+
+% ── QoI 1 ──────────────────────────────────────────────────────
+\subsection{Neutral spread}
+
+\begin{table}[ht]
+\centering
+\caption{Sobol indices for the neutral spread $\delta^*(y = 0)$. Only $\beta_1$ and $\alpha_1$ contribute meaningfully.}
+\label{tab:sobol-qoi1}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & $S_i$ & $S_{T_i}$ \\
+\midrule
+$\sigma_{\text{EUR}}$ & 0.002 & 0.001 \\
+$\gamma$              & 0.000 & 0.001 \\
+$\lambda_{\text{scale}}$ & 0.002 & 0.001 \\
+$\alpha_1$            & \textbf{0.173} & \textbf{0.180} \\
+$\alpha_2$            & 0.000 & 0.000 \\
+$\beta_1$             & \textbf{0.784} & \textbf{0.818} \\
+$\beta_2$             & 0.000 & 0.000 \\
+$\eta$                & 0.000 & 0.000 \\
+\midrule
+$\sum$                & 0.96 & 1.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The neutral spread is controlled almost entirely by the logistic demand curve of the aggressive tier: $\beta_1$ accounts for 78\% of the variance and $\alpha_1$ for 17\%. All other parameters, including volatility, risk aversion, and arrival rates, are irrelevant. The first-order indices sum to 0.96, indicating that the model is nearly perfectly additive for this output.
+
+This result can be understood from the structure of the quoting formula. The optimal markup solves $\delta^* = \arg\max_\delta f(\delta)(\delta - p)$, where $p = ((2y + zd)^\top A(0) + B(0)^\top) \cdot d$ is the quoting momentum. At zero inventory with $B(0) = 0$ (which holds when the model parameters are direction-symmetric; see Chapter~\ref{ch:ode}), the momentum reduces to $p = z \cdot d^\top A(0)\,d$, which is small for the trade size $z = 1$\,M\$ considered here. The optimal markup is therefore dominated by the maximization of $f(\delta) \cdot \delta$ over the logistic demand curve, which depends only on $\alpha_1$ and $\beta_1$ of the tier being quoted. The Riccati matrix $A(0)$ does depend on $\sigma$, $\gamma$, and $\lambda$, but its contribution to the markup through $p$ is negligible at this trade size, consistent with the near-zero Sobol indices for these parameters.
+
+From a practical standpoint, this means that a bank seeking to control its base spread needs only to estimate the client demand curve accurately. Volatility and risk aversion are irrelevant for the flat-inventory spread.
+
+
+% ── QoI 2 ──────────────────────────────────────────────────────
+\subsection{Inventory skew}
+
+\begin{table}[ht]
+\centering
+\caption{Sobol indices for the inventory skew $\delta^*(y = 10) - \delta^*(y = 0)$. Three market-level parameters dominate with roughly equal importance.}
+\label{tab:sobol-qoi2}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & $S_i$ & $S_{T_i}$ \\
+\midrule
+$\sigma_{\text{EUR}}$ & \textbf{0.325} & \textbf{0.347} \\
+$\gamma$              & \textbf{0.338} & \textbf{0.376} \\
+$\lambda_{\text{scale}}$ & \textbf{0.291} & \textbf{0.299} \\
+$\alpha_1$            & 0.005 & 0.006 \\
+$\alpha_2$            & 0.001 & 0.001 \\
+$\beta_1$             & 0.012 & 0.012 \\
+$\beta_2$             & 0.011 & 0.007 \\
+$\eta$                & 0.000 & 0.000 \\
+\midrule
+$\sum$                & 0.98 & 1.05 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The inventory skew is driven by three parameters with roughly equal importance: risk aversion $\gamma$ (34\%), volatility $\sigma_{\text{EUR}}$ (33\%), and arrival rate scale $\lambda_{\text{scale}}$ (29\%). The demand curve parameters and execution cost are irrelevant. The model is again nearly additive, with $\sum S_i = 0.98$ and $\sum S_{T_i} = 1.05$.
+
+The skew arises from the value function gradient $2A(0)\,y$, where $A(0)$ is the Riccati matrix at time zero. The matrix $A$ encodes the cost of holding inventory: higher volatility increases inventory risk and drives $A$ larger, higher risk aversion directly amplifies the running penalty and hence $A$, and higher arrival rates change the structure of the quoting Hamiltonian and thereby influence how $A$ balances risk against profit. The demand curve parameters $(\alpha_n, \beta_n)$ affect the level of the spread but not its inventory dependence, because they enter through the Hamiltonian coefficients which scale $A$ approximately uniformly.
+
+From a practical standpoint, the inventory adjustment depends on accurately knowing the market environment --- volatility, overall flow volume --- and the risk preference. The client demand model, which was the dominant factor for the neutral spread, is essentially irrelevant here.
+
+
+% ── QoI 3 ──────────────────────────────────────────────────────
+\subsection{Hedge rate}
+
+\begin{table}[ht]
+\centering
+\caption{Sobol indices for the hedge rate $\xi^*(y = 10)$. Four parameters contribute, with significant interactions ($\sum S_{T_i} = 1.21$).}
+\label{tab:sobol-qoi3}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & $S_i$ & $S_{T_i}$ \\
+\midrule
+$\sigma_{\text{EUR}}$ & \textbf{0.215} & \textbf{0.296} \\
+$\gamma$              & \textbf{0.220} & \textbf{0.317} \\
+$\lambda_{\text{scale}}$ & \textbf{0.188} & \textbf{0.257} \\
+$\alpha_1$            & 0.006 & 0.009 \\
+$\alpha_2$            & 0.000 & 0.001 \\
+$\beta_1$             & 0.030 & 0.044 \\
+$\beta_2$             & 0.006 & 0.006 \\
+$\eta$                & \textbf{0.157} & \textbf{0.282} \\
+\midrule
+$\sum$                & 0.82 & 1.21 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The hedge rate is the most complex QoI. Four parameters contribute meaningfully: $\gamma$ (22\%), $\sigma_{\text{EUR}}$ (22\%), $\lambda_{\text{scale}}$ (19\%), and $\eta$ (16\%). Crucially, the gap between first-order and total-effect indices is much larger than for the previous two QoIs. The execution cost $\eta$, in particular, has $S_i = 0.16$ but $S_{T_i} = 0.28$, nearly twice as large, indicating strong interaction effects. The total-effect indices sum to 1.21, confirming that a substantial fraction of the variance is shared between parameters.
+
+These interactions arise naturally from the hedge rate formula: $\xi^* = (p - \psi) / (2\eta)$, where $p$ is the hedging momentum derived from the value function gradient (and hence depends on $\sigma$, $\gamma$, and $\lambda$). The execution cost $\eta$ enters multiplicatively with $p$, so that changing $\eta$ amplifies or dampens the effect of changing any parameter that affects the gradient. This multiplicative coupling explains why $\eta$ has strong interactions with the other dominant parameters.
+
+From a practical standpoint, the hedge rate is the least robust component of the optimal strategy. It depends on all the parameters that affect the inventory skew (volatility, risk aversion, flow activity) plus the execution cost, with significant nonlinear interactions. Underestimating $\eta$ is particularly dangerous because it enters inversely: a factor-of-two underestimate of market impact leads to a factor-of-two overestimate of the optimal hedging rate.
+
+
+\subsection{Summary of sensitivity structure}
+
+Table~\ref{tab:sobol-summary} summarizes the key finding: different aspects of the strategy are driven by different parameters.
+
+\begin{table}[ht]
+\centering
+\caption{Dominant parameters for each quantity of interest.}
+\label{tab:sobol-summary}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Quantity of interest & Dominant parameters & Interactions \\
+\midrule
+Neutral spread $\delta^*(y = 0)$              & $\beta_1$, $\alpha_1$ & Negligible \\
+Inventory skew $\delta^*(y = 10) - \delta^*(y = 0)$ & $\gamma$, $\sigma_{\text{EUR}}$, $\lambda_{\text{scale}}$ & Small \\
+Hedge rate $\xi^*(y = 10)$                    & $\gamma$, $\sigma_{\text{EUR}}$, $\lambda_{\text{scale}}$, $\eta$ & Significant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two parameters can be identified as globally unimportant: the passive-tier demand parameters $\alpha_2$ and $\beta_2$ have $S_{T_i} \approx 0$ across all three QoIs and can be fixed at their nominal values without loss. This is expected: we evaluate the markup for tier~1, whose quoting formula uses only $\alpha_1$ and $\beta_1$ directly. The passive-tier parameters do enter the Riccati matrix $A$ through their contribution to the Hamiltonian coefficients, but this indirect coupling is negligibly small.
+
+
+\section{Results: forward uncertainty quantification}
+\label{sec:sa-forward}
+
+Having identified the important parameters, we now characterize the full output distributions by propagating the parameter uncertainty through the model. Table~\ref{tab:forward-uq} reports the mean, standard deviation, 90\% credible interval, and nominal value for each QoI.
+
+\begin{table}[ht]
+\centering
+\caption{Forward uncertainty quantification results. The coefficient of variation (CV) indicates the relative spread of each output distribution. The sample size is $2N = 20{,}000$.}
+\label{tab:forward-uq}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+QoI & Mean & Std & 90\% CI & Nominal & CV \\
+\midrule
+$\delta^*(y = 0)$ [bps]                    & 0.189 & 0.037 & $[0.138,\; 0.257]$ & 0.182 & 20\% \\
+$\delta^*(y{=}10) - \delta^*(y{=}0)$ [bps] & 0.152 & 0.058 & $[0.075,\; 0.262]$ & 0.126 & 38\% \\
+$\xi^*(y = 10)$ [M\$/day]                  & $-3207$ & 3414 & $[-9812,\; 0]$ & $-1879$ & 106\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The three QoIs exhibit markedly different levels of robustness under parameter uncertainty.
+
+The \textbf{neutral spread} is relatively robust, with a coefficient of variation of about 20\%. Its 90\% credible interval, $[0.138, 0.257]$\,bps, is reasonably tight. The nominal value of 0.182\,bps lies close to the mean of 0.189\,bps, indicating that the nominal parameterization is representative.
+
+The \textbf{inventory skew} is moderately uncertain, with a coefficient of variation of 38\%. The 90\% credible interval $[0.075, 0.262]$\,bps spans roughly a factor of 3.5 from low to high, reflecting the combined uncertainty in volatility, risk aversion, and arrival rates. The nominal value of 0.126\,bps falls below the mean of 0.152\,bps. This shift arises because the uniform range for $\gamma$, $[10, 40]$, has its midpoint at 25, above the nominal value of 20, so the average risk aversion in the sample is higher than the nominal. Since the inventory skew is increasing in $\gamma$, this pulls the mean output above the nominal.
+
+The \textbf{hedge rate} is highly uncertain, with a coefficient of variation exceeding 100\%. The 90\% credible interval $[-9812, 0]$\,M\$/day is enormous: the model prescribes hedge rates ranging from zero to nearly 10,000\,M\$/day, depending on the parameter values. The distribution is heavily skewed toward large negative values because low values of $\eta$ produce extremely aggressive hedging rates through the $1/(2\eta)$ factor. This confirms the Sobol analysis: the hedge rate depends on everything, and the inverse dependence on $\eta$ makes it particularly sensitive to execution cost estimation.
+
+
+\section{Discussion}
+\label{sec:sa-discussion}
+
+The results reveal a clean separation of the sensitivity structure. The base spread is a \emph{microstructure} quantity: it depends only on the shape of the client demand curve and is insensitive to market-level conditions. The inventory skew and hedge rate are \emph{risk management} quantities: they depend on the volatility environment, the risk preference, and the overall level of market activity. The execution cost $\eta$ matters only for hedging, not for quoting.
+
+This separation has practical implications for model calibration. A bank implementing the strategy of \cite{barzykin2023} can calibrate the demand curve parameters $(\alpha_1, \beta_1)$ from client fill data to control the base spread, and separately estimate the market parameters $(\sigma, \gamma, \lambda)$ from broader market data to control the inventory management behavior. These two calibration tasks are largely independent and can proceed in parallel.
+
+The finding that the hedge rate is the least robust output is also practically relevant. In real trading operations, hedging decisions involve large notional amounts executed on the dealer-to-dealer market. The sensitivity analysis shows that the model's hedging prescriptions are highly sensitive to the execution cost parameter $\eta$, which is among the hardest model inputs to estimate. This suggests that the hedging policy should be treated with more caution than the quoting policy, and that the model's hedging recommendations may benefit from additional robustness checks or conservative parameter choices.
+
+All results in this chapter are based on the ODE approximation, which replaces the exact Hamiltonian with a quadratic Taylor expansion around zero quoting momentum. This approximation is accurate for moderate inventories but may break down at large $|y|$, where the quoting momentum becomes large and the higher-order terms in the Hamiltonian become significant. In Chapter~\ref{ch:pde}, we develop a grid-based PDE solver for the full HJB equation and use it to verify whether the sensitivity conclusions derived here carry over to the exact solution.
