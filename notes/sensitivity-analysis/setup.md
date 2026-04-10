@@ -7,7 +7,7 @@ Study how uncertain model parameters affect the optimal market-making strategy p
 This follows the thesis structure discussed with Anders (2026-03-29): the sensitivity/UQ chapter sits between the ODE approximation and the PDE solver, and the PDE is later used to validate the ODE-based conclusions in low dimension.
 
 ## Currency setup
-
+ 
 We work with the **2-currency case (USD, EUR)** — the simplest non-trivial model with one currency pair. This keeps the parameter count manageable, the results easy to visualize, and allows direct validation against the 2D PDE solver.
 
 Extension to 3+ currencies is a natural follow-up: it introduces cross-pair correlations (rho) and cross-Hamiltonian coupling, adding new sensitivity dimensions that don't exist in the 2-currency case.
@@ -48,20 +48,38 @@ We study 8 parameters, using the paper's Table 1 values (EUR/USD pair) as nomina
 
 ## Quantities of interest
 
-We compute three scalar outputs for each parameter sample:
+We compute two sets of QoIs: policy-level quantities that probe the optimal strategy directly, and economic quantities that measure what the desk actually manages to.
 
-1. **delta_star(y=0)** — The optimal markup at zero inventory for tier 1, trade size z = 1 M$. This is the "neutral spread" — the most basic measure of how wide the market maker quotes when flat. Practically, this determines the base profitability per trade.
+### Set A — Policy QoIs
 
-2. **delta_star(y=10) - delta_star(y=0)** — The inventory skew, i.e., how much the markup changes when the market maker holds 10 M$ EUR. This measures the strategy's responsiveness to inventory risk. Parameters that affect the value function curvature (gamma, sigma) should dominate here.
+These probe the shape of the optimal policy at specific inventory levels.
 
-3. **xi_star(y=10)** — The optimal hedge rate when holding 10 M$ EUR. This measures how aggressively the model hedges inventory. Directly influenced by eta (execution cost) and by the gradient of the value function (which depends on everything).
+1. **delta_star(y=0, tier 1) - delta_star(y=0, tier 2)** — The tier spread differential at zero inventory, trade size z = 1 M$. This measures how much wider the model quotes for passive clients (tier 2) vs. aggressive clients (tier 1). Banks care deeply about this: it is the basis of their client segmentation / tiered pricing. Note: tier 2 (passive) has lower alpha and beta, so tier 2 markup > tier 1 markup, making this quantity negative in sign. We report it as tier 1 minus tier 2 (a negative number reflecting the discount given to aggressive clients).
+
+2. **delta_star(y=10) - delta_star(y=0)** — The inventory skew for tier 1, z = 1 M$. How much the markup changes when the market maker holds 10 M$ EUR. Measures the strategy's responsiveness to inventory risk. Parameters that affect the value function curvature (gamma, sigma) should dominate here.
+
+3. **xi_star(y=10)** — The optimal hedge rate when holding 10 M$ EUR. Measures how aggressively the model hedges inventory. Directly influenced by eta (execution cost) and by the gradient of the value function.
+
+### Set B — Economic QoIs
+
+These aggregate across tiers and sizes to measure the economic outcomes the desk manages to.
+
+4. **R(y=0)** — Instantaneous expected revenue rate at zero inventory:
+   R = sum over tiers t, sizes j of: lambda_j * f(delta_star_{t,j}(y=0)) * delta_star_{t,j}(y=0) * z_j.
+   This is the strategy's "earning power" when flat. It naturally weights each parameter by its economic importance (large-lambda tiers and large-z buckets contribute more), avoiding arbitrary tier/size choices.
+
+5. **L(xi_star(y=10))** — Hedging cost rate at y = 10 M$ EUR: L = psi * |xi_star| + eta * xi_star^2.
+   What the desk pays to unwind inventory through the interbank market.
+
+6. **R(y=10) - L(xi_star(y=10))** — Net revenue rate at y = 10 M$ EUR. Revenue minus hedging cost under inventory pressure. The single number a desk head cares about most: "given that I'm carrying inventory, am I still making money after hedging costs?"
 
 ### Why these QoIs
 
-- They are **deterministic** given the ODE solution — no Monte Carlo simulation noise to deal with. This keeps the Sobol analysis clean.
-- They probe **different aspects** of the strategy: quoting (QoI 1-2) vs. hedging (QoI 3), and flat (QoI 1) vs. under inventory pressure (QoI 2-3).
-- A key expected result: different QoIs will have different sensitivity rankings, just as the SIR thesis (Jakobsson & Warnberg, 2023) found that peak time and peak value depend on different parameters.
-- Simulation-based QoIs (expected PnL, inventory variance) could be added as a second pass once the important parameters are identified.
+- All six are **deterministic** given the ODE solution — no Monte Carlo simulation noise. This keeps the Sobol analysis clean.
+- **Set A** probes the policy shape: client discrimination (QoI 1), inventory responsiveness (QoI 2), and hedging aggressiveness (QoI 3).
+- **Set B** probes economic outcomes: earning power (QoI 4), hedging cost (QoI 5), and bottom line (QoI 6).
+- A key expected result: the two sets may give different sensitivity rankings. A parameter could barely move the markup but strongly affect revenue (or vice versa), and that contrast is itself a useful practical insight.
+- Both sets should appear in the main text. They can be presented compactly: one 2×3 subplot figure for Sobol indices (one column per QoI, one row per set), one 2×3 subplot figure for forward UQ densities. If space becomes a concern, Set A can be moved to an appendix — but the default should be to keep both in the main chapter.
 
 ## Methods
 
