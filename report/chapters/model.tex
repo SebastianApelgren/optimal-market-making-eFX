@@ -1,0 +1,259 @@
+\chapter{The Multi-Currency Market Making Model}
+\label{ch:model}
+
+We now turn to the mathematical formulation of the market making problem. This chapter presents the multi-currency model of \cite{barzykin2023} and derives the Hamilton-Jacobi-Bellman (HJB) equation that governs the optimal quoting and hedging strategy. The model captures a dealer who simultaneously quotes on multiple FX currency pairs, managing the resulting inventory risk through price skewing and hedging on the inter-dealer market.
+
+The chapter is organized as follows. Section~\ref{sec:model-setup} introduces the mathematical framework: currencies, exchange rates, and the inventory accounting convention that makes the multi-currency problem tractable. Sections~\ref{sec:model-quoting} and~\ref{sec:model-hedging} describe the two channels through which the dealer interacts with the market --- client quoting and inter-dealer hedging. Section~\ref{sec:model-objective} formulates the optimization problem, and Section~\ref{sec:model-hjb} derives the HJB equation. Finally, Section~\ref{sec:model-hamiltonians} evaluates the Hamiltonians in closed form for the specific functional forms used in the numerical work.
+
+
+% ==================================================================
+\section{Currencies, exchange rates, and inventory}
+\label{sec:model-setup}
+
+Consider a dealer operating in a market with $d$ currencies, one of which serves as the reference currency. We index the currencies $i = 1, \ldots, d$ and take currency~1 to be the reference (USD in the paper's numerical example). The spot exchange rate $S_i(t)$ denotes the price of one unit of currency~$i$ in terms of the reference currency, with $S_1 \equiv 1$ by convention. Each exchange rate follows a geometric Brownian motion:
+\begin{equation}
+  \label{eq:exchange-rate}
+  \frac{\dd S_i}{S_i} = \mu_i \, \dd t + \sigma_i \, \dd W_i, \qquad i = 2, \ldots, d,
+\end{equation}
+where $\mu_i$ is the drift, $\sigma_i > 0$ the volatility, and $W_1, \ldots, W_d$ are correlated standard Brownian motions with $\langle W_i, W_j \rangle_t = \rho_{ij}\, t$. The covariance matrix of the log-returns is
+\[
+  \Sigma_{ij} = \sigma_i\,\sigma_j\,\rho_{ij}.
+\]
+Since the reference currency has $\sigma_1 = 0$, the first row and column of $\Sigma$ vanish, and the effective randomness is $(d-1)$-dimensional.
+
+The dealer's inventory is described by a vector $Y(t) \in \R^d$, where $Y_i(t)$ represents the position in currency~$i$ valued in units of the reference currency. This accounting convention is central to the model. If the dealer holds $q_i$ units of currency~$i$, the reference-currency value of that position is $Y_i = q_i\,S_i$. Between trades, the quantity $q_i$ is constant, so the inventory inherits the dynamics of the exchange rate:
+\begin{equation}
+  \label{eq:inventory-mid}
+  \dd Y_i\big|_{\text{mid}} = q_i \, \dd S_i = Y_i\!\left(\mu_i \, \dd t + \sigma_i \, \dd W_i\right).
+\end{equation}
+The volatility of each inventory component thus scales with the position size: a larger holding in currency~$i$ entails proportionally more risk. The covariance between components $i$ and $j$ from exchange rate movements is $\Sigma_{ij}\,Y_i\,Y_j\,\dd t$, and the instantaneous variance of the total portfolio value is $Y^\T\Sigma\,Y$.
+
+Trading in FX involves currency pairs rather than individual currencies. A trade on the pair involving currencies~$i$ and~$j$ is a simultaneous exchange: the dealer receives one currency and delivers the other. We write $d_{ij} = e_i - e_j$ for the \emph{direction vector} of a trade in which the market maker receives currency~$i$ and delivers currency~$j$, where $e_i$ is the $i$-th standard basis vector. A trade of size~$z$ in this direction changes the inventory by
+\begin{equation}
+  \label{eq:inventory-trade}
+  Y \;\longrightarrow\; Y + z\,d_{ij}.
+\end{equation}
+For each unordered pair $\{i, j\}$, there are two possible trade directions: $(i,j)$ and $(j,i)$. The dealer quotes on both sides independently.
+
+The direction-vector representation reveals a structural property of the FX market that distinguishes it from equity or bond markets. Consider a setting with three currencies: USD~(1), EUR~(2), and GBP~(3). A client trade on the cross pair EUR/GBP, in which the dealer receives EUR and delivers GBP, changes the inventory by $z(e_2 - e_3)$. This is exactly the combined effect of receiving EUR against USD and delivering GBP against USD:
+\[
+  z(e_2 - e_3) = z(e_2 - e_1) + z(e_1 - e_3).
+\]
+Cross-pair exposures are linear combinations of the exposures to the reference-currency pairs. The dealer's risk is therefore fully characterized by the $d$-dimensional currency inventory vector~$Y$, not by the $\binom{d}{2}$ individual pair positions. This reduces the dimensionality of the problem from the number of pairs to the number of currencies --- a significant simplification when $d$ is large.
+
+For hedging purposes, we work with \emph{canonical pairs}: unordered pairs $\{i, j\}$ with $i < j$, so that each pair is counted once. There are $\binom{d}{2}$ such pairs.
+
+
+% ==================================================================
+\section{Client order flow and quoting}
+\label{sec:model-quoting}
+
+The dealer provides liquidity to clients through a request-for-quote (RFQ) mechanism. A client wishing to trade on a particular currency pair at a given size sends a request; the dealer responds with a price that includes a markup~$\delta$ over the current mid-rate; and the client either fills or declines.
+
+The model organizes client flow along three dimensions. First, there is a \emph{pricing ladder} of discrete trade sizes $z_1, \ldots, z_K$, reflecting the fact that FX dealers typically quote different spreads for different notional amounts. In the paper's numerical example, $z \in \{1, 5, 10, 20, 50\}$~M\$. Second, clients are grouped into $N$~\emph{tiers} that reflect differences in trading behavior. A common classification distinguishes aggressive clients, such as algorithmic traders, from more passive ones, such as corporates seeking to hedge commercial exposures. Third, each trade is on a specific directed pair~$(i,j)$.
+
+For each combination of directed pair~$(i,j)$, tier~$n$, and trade size~$z_k$, client requests arrive according to an independent Poisson process with intensity~$\lambda^n_k$ per unit time. When a request arrives, the dealer offers a markup $\delta \geq 0$ over the mid-rate. The client fills the trade with a probability that depends on the markup:
+\[
+  \Pr(\text{fill}) = f^n(\delta),
+\]
+where $f^n \colon [0, \infty) \to (0, 1)$ is a decreasing function. A low markup makes the trade attractive and the fill likely; a high markup deters the client. The model structure does not depend on the particular form of~$f^n$: any decreasing function leads to the same HJB equation. What changes is the form of the resulting Hamiltonian.
+
+For the numerical work in this thesis, following \cite{barzykin2023}, we use the logistic specification
+\begin{equation}
+  \label{eq:logistic}
+  f^n(\delta) = \frac{1}{1 + e^{\alpha_n + \beta_n\,\delta}},
+\end{equation}
+with tier-specific parameters $\alpha_n \in \R$ and $\beta_n > 0$. The parameter~$\alpha_n$ controls the base fill probability: when $\alpha_n < 0$, the fill probability at zero markup exceeds $1/2$, meaning the client is predisposed to trade even without a price incentive. The parameter~$\beta_n$ governs price sensitivity: a large $\beta_n$ means that the fill probability decays rapidly with the markup, as one would expect for price-sensitive clients.
+
+When a trade fills on directed pair~$(i,j)$ at size~$z_k$, two things happen simultaneously. The dealer earns revenue $z_k\,\delta$ from the markup, and the inventory changes by $z_k\,d_{ij}$ as in~\eqref{eq:inventory-trade}. These two effects --- profit from providing liquidity and inventory risk from acquiring a position --- are at the heart of the quoting optimization.
+
+In the paper's numerical example, the arrival rates are the same for both directions of a given pair and for all tiers: $\lambda^n_k = \lambda_k$ depends only on the trade size and the pair. This direction symmetry implies that client buy and sell flow are balanced on average, so the optimal strategy has no systematic directional bias. The tiers differ only in their demand-curve parameters $\alpha_n$ and $\beta_n$.
+
+
+% ==================================================================
+\section{Hedging on the dealer-to-dealer market}
+\label{sec:model-hedging}
+
+In addition to skewing quotes, the dealer can manage inventory risk by trading on the dealer-to-dealer (D2D) segment of the market. For each canonical pair $\{i,j\}$ with $i < j$, the dealer chooses a continuous hedge rate $\xi_{ij}(t)$, measured in M\$ per unit time. A positive $\xi_{ij}$ means the dealer buys currency~$i$ and sells currency~$j$; a negative rate means the reverse. The hedge changes the inventory at rate
+\[
+  \dd Y\big|_{\text{hedge}} = \sum_{\{i,j\},\; i < j} \xi_{ij}\, d_{ij}\, \dd t.
+\]
+
+Hedging incurs execution costs. Each D2D trade carries a cost composed of two parts:
+\begin{equation}
+  \label{eq:execution-cost}
+  L_{ij}(\xi) = \psi_{ij}\,|\xi| + \eta_{ij}\,\xi^2.
+\end{equation}
+The first term, with $\psi_{ij} > 0$, is a proportional cost representing the bid-ask spread on the D2D market. It creates a threshold effect: small hedges are not worth the spread. The second term, with $\eta_{ij} > 0$, is a quadratic market impact cost that penalizes large or aggressive hedging. Together, the two terms create an incentive to hedge at moderate rates --- enough to reduce risk, but not so aggressively as to incur prohibitive costs.
+
+The full model of \cite{barzykin2023} also includes parameters~$k_i$ that account for permanent market impact of the dealer's hedging activity on the mid-prices. These modify the effective hedging momentum by a small correction proportional to the inventory and the value function gradient. In the paper's calibration, $k_i \sim 10^{-7}$, which is negligible relative to the other terms. We omit these parameters in what follows and set $k_i = 0$ throughout.
+
+
+% ==================================================================
+\section{The optimization problem}
+\label{sec:model-objective}
+
+The dealer's controls are the markup schedule $\delta^n_{ij,k}(t, y)$, specifying the markup offered for each directed pair, tier, and trade size as a function of time and inventory, and the hedge rates $\xi_{ij}(t, y)$ for each canonical pair. The dealer seeks to maximize the expected total profit over a finite trading horizon $[0, T]$, net of hedging costs, inventory risk, and a terminal penalty for residual positions. Formally, the objective starting from time~$t$ with inventory~$y$ is
+\begin{equation}
+  \label{eq:objective}
+  J = \E\!\left[\,\sum_{\text{fills in}\,(t,T]} z_k\,\delta^n_{ij,k} - \int_t^T\!\left(\sum_{\{i,j\}} L_{ij}\!\left(\xi_{ij}(s)\right) + \frac{\gamma}{2}\,Y(s)^\T\!\Sigma\,Y(s)\right) \dd s - Y(T)^\T\!\kappa\,Y(T) \;\middle|\; Y(t) = y\,\right],
+\end{equation}
+where the first sum runs over all client trades that fill during the interval $(t, T]$.
+
+The three cost terms in~\eqref{eq:objective} serve distinct purposes. The running penalty $\frac{\gamma}{2}\,Y^\T\!\Sigma\,Y$ is a mean-variance risk aversion term, following the approach of Cartea and Jaimungal~\cite{cartea2014}. The matrix~$\Sigma$ weights the penalty by the covariance structure of the exchange rates, so that positions in volatile or correlated currencies are penalized more heavily. The parameter $\gamma > 0$ controls the overall risk aversion: a large~$\gamma$ pushes the dealer to reduce inventory more aggressively, either through price skewing or hedging. The hedging cost $L_{ij}(\xi_{ij})$ penalizes the rate of externalisation in each pair, as discussed in Section~\ref{sec:model-hedging}. The terminal penalty $Y(T)^\T\!\kappa\,Y(T)$, with $\kappa$ positive semidefinite, represents the cost of liquidating any inventory remaining at the end of the horizon. In the paper's numerical example, $\kappa = 0$: the running penalty alone is sufficient to keep positions bounded.
+
+The \emph{value function} is the supremum of~\eqref{eq:objective} over all admissible strategies:
+\begin{equation}
+  \label{eq:value-function}
+  \theta(t, y) = \sup_{\delta,\,\xi}\; J(t, y;\, \delta, \xi).
+\end{equation}
+By construction, $\theta(t,y)$ gives the maximum expected profit that the dealer can extract from time~$t$ onward, starting from inventory~$y$. In what follows, we derive the PDE that $\theta$ must satisfy.
+
+
+% ==================================================================
+\section{The Hamilton-Jacobi-Bellman equation}
+\label{sec:model-hjb}
+
+We derive the PDE governing the value function using the dynamic programming principle. The idea is to consider the system's evolution over an infinitesimal time interval $[t, t + \dd t]$ and require that the value function be consistent with optimality. Three types of events can occur in this interval: exchange rates move continuously, a client trade may arrive and fill, and the dealer hedges continuously.
+
+\paragraph{Continuous dynamics.}
+Between client trades, the inventory evolves smoothly from mid-price movements~\eqref{eq:inventory-mid} and the hedging drift. Applying It\^{o}'s formula to $\theta(t, Y(t))$ along the continuous component, the expected infinitesimal change in~$\theta$ is
+\begin{align*}
+  \E\!\left[\dd\theta\big|_{\text{cont}}\right] = \Biggl(&\partial_t\theta + \frac{1}{2}\sum_{i,j=1}^d \Sigma_{ij}\,y_i\,y_j\,\frac{\partial^2\theta}{\partial y_i\,\partial y_j} + \sum_{i=1}^d \mu_i\,y_i\,\frac{\partial\theta}{\partial y_i}\\
+  &+ \sum_{\{i,j\}} \xi_{ij}\!\left(\frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j}\right)\Biggr) \dd t.
+\end{align*}
+The second-order term arises from the quadratic covariation of the Brownian-driven inventory components. The drift from mid-price movements contributes through $\mu_i\,y_i$; in the paper's example, $\mu = 0$, so this term vanishes. The hedging drift couples each canonical pair to the value function gradient.
+
+\paragraph{Client trades.}
+Client trades arrive as Poisson jumps superimposed on the continuous dynamics. In $[t, t + \dd t]$, the probability that a request arrives on directed pair~$(i,j)$, tier~$n$, size~$z_k$ and the client fills is $\lambda^n_k\,f^n(\delta^n_{ij,k})\,\dd t$. A filled trade earns revenue $z_k\,\delta^n_{ij,k}$ and shifts the continuation value from $\theta(t, y)$ to $\theta(t, y + z_k\,d_{ij})$. The expected contribution from all quoting events in $[t, t+\dd t]$ is therefore
+\[
+  \sum_{(i,j),\,n,\,k} \lambda^n_k\,f^n\!\left(\delta^n_{ij,k}\right) \left[z_k\,\delta^n_{ij,k} + \theta(t, y + z_k\,d_{ij}) - \theta(t,y)\right] \dd t.
+\]
+Each summand combines the immediate profit from the markup with the change in future value from the inventory shift. The markup~$\delta$ controls the trade-off: a higher markup earns more per fill but reduces the fill probability.
+
+\paragraph{Assembling the HJB equation.}
+The dynamic programming principle requires that, under the optimal controls, the expected infinitesimal change in $\theta$ plus the flow payoff equals zero. Combining the continuous and jump contributions, subtracting the hedging costs and the running penalty, and requiring optimality, we obtain
+\begin{align}
+  0 = \partial_t\theta &+ \frac{1}{2}\sum_{i,j=1}^d \Sigma_{ij}\,y_i\,y_j\,\frac{\partial^2\theta}{\partial y_i\,\partial y_j} + \sum_{i=1}^d \mu_i\,y_i\,\frac{\partial\theta}{\partial y_i} - \frac{\gamma}{2}\,y^\T\!\Sigma\,y \notag\\
+  &+ \sup_{\delta}\;\sum_{(i,j),\,n,\,k} \lambda^n_k\,f^n(\delta^n_{ij,k})\left[z_k\,\delta^n_{ij,k} + \theta(y + z_k\,d_{ij}) - \theta(y)\right] \notag\\
+  &+ \sup_{\xi}\;\sum_{\{i,j\}}\left[\xi_{ij}\!\left(\frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j}\right) - L_{ij}(\xi_{ij})\right]. \label{eq:hjb-raw}
+\end{align}
+A crucial simplification now takes place. In the quoting supremum, the markup $\delta^n_{ij,k}$ for each combination of pair, tier, and size enters only its own summand, so the joint optimization separates into independent scalar problems. Rearranging the quoting contribution for a single event:
+\[
+  \sup_{\delta}\; f^n(\delta)\left[z_k\,\delta + \theta(y + z_k\,d_{ij}) - \theta(y)\right] = z_k\sup_{\delta}\; f^n(\delta)\!\left(\delta - \frac{\theta(y) - \theta(y + z_k\,d_{ij})}{z_k}\right).
+\]
+The quantity
+\begin{equation}
+  \label{eq:quoting-momentum}
+  p = \frac{\theta(t,y) - \theta(t,\,y + z_k\,d_{ij})}{z_k}
+\end{equation}
+is the per-unit cost to the value function of acquiring inventory $z_k\,d_{ij}$: positive when the trade worsens the dealer's position, negative when it improves it. The quoting Hamiltonian
+\begin{equation}
+  \label{eq:quoting-hamiltonian}
+  H^n(p) = \sup_{\delta \geq 0}\; f^n(\delta)\,(\delta - p)
+\end{equation}
+gives the optimal expected profit rate from a single quoting event, net of the inventory cost.
+
+Similarly, the hedge rate $\xi_{ij}$ for each canonical pair enters only through the gradient coupling and the execution cost $L_{ij}$, so the hedging optimization also separates. The hedging Hamiltonian for pair $\{i,j\}$ is
+\begin{equation}
+  \label{eq:hedging-hamiltonian}
+  \mathcal{H}_{ij}(q) = \sup_{\xi}\;\left[q\,\xi - L_{ij}(\xi)\right],
+\end{equation}
+evaluated at
+\begin{equation}
+  \label{eq:hedging-momentum}
+  q_{ij} = \frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j},
+\end{equation}
+the difference in marginal values between the two currencies. The hedging Hamiltonian~\eqref{eq:hedging-hamiltonian} is precisely the Legendre--Fenchel transform of the execution cost~$L_{ij}$, a connection to convex duality that will yield the closed-form evaluation in Section~\ref{sec:model-hamiltonians}.
+
+Substituting the Hamiltonians into~\eqref{eq:hjb-raw}, the HJB equation takes the compact form
+\begin{align}
+  \label{eq:hjb}
+  0 = \partial_t\theta &+ \frac{1}{2}\operatorname{Tr}\!\bigl(\mathcal{D}(y)\,\Sigma\,\mathcal{D}(y)\,D^2_{yy}\theta\bigr) + \sum_{i=1}^d\mu_i\,y_i\,\frac{\partial\theta}{\partial y_i} - \frac{\gamma}{2}\,y^\T\!\Sigma\,y \notag\\
+  &+ Q(y,\theta) + \mathcal{H}_{\text{hedge}}(y,\nabla_y\theta),
+\end{align}
+where $\mathcal{D}(y) = \operatorname{diag}(y_1, \ldots, y_d)$ and
+\begin{align}
+  Q(y,\theta) &= \sum_{(i,j),\,n,\,k} z_k\,\lambda^n_k\,H^n\!\left(\frac{\theta(y) - \theta(y + z_k\,d_{ij})}{z_k}\right), \label{eq:Q-total}\\[4pt]
+  \mathcal{H}_{\text{hedge}}(y,\nabla_y\theta) &= \sum_{\{i,j\}} \mathcal{H}_{ij}\!\left(\frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j}\right). \label{eq:Hhedge-total}
+\end{align}
+The terminal condition is
+\begin{equation}
+  \label{eq:terminal}
+  \theta(T, y) = -y^\T\!\kappa\,y.
+\end{equation}
+
+Equation~\eqref{eq:hjb} is the central object of this thesis. Each term has a clear interpretation. The diffusion term $\frac{1}{2}\operatorname{Tr}(\mathcal{D}(y)\,\Sigma\,\mathcal{D}(y)\,D^2_{yy}\theta)$ captures how exchange rate movements affect the value function through the inventory: it is the infinitesimal generator of the log-normal inventory process~\eqref{eq:inventory-mid}. The running penalty $-\frac{\gamma}{2}\,y^\T\!\Sigma\,y$ is the instantaneous cost of holding a risky inventory. The quoting Hamiltonian~$Q$ aggregates the optimal expected profit from all client quoting events. The hedging Hamiltonian~$\mathcal{H}_{\text{hedge}}$ captures the net benefit of optimal hedging on each D2D pair. Together, the four terms express the fundamental balance of market making: the dealer earns from providing liquidity ($Q > 0$) and from hedging efficiently ($\mathcal{H}_{\text{hedge}} \geq 0$), while paying a price for carrying risk ($-\frac{\gamma}{2}\,y^\T\!\Sigma\,y < 0$ when $y \neq 0$).
+
+The HJB equation is a nonlinear PDE in $d$ spatial dimensions. The nonlinearity enters through the Hamiltonians: both $H^n$ and $\mathcal{H}_{ij}$ involve suprema over controls. Moreover, the quoting Hamiltonian is nonlocal in $y$ because $\theta(y + z_k\,d_{ij})$ couples each point to its neighbors at distance $z_k$ in the direction~$d_{ij}$. For $d \leq 3$, the equation can be solved numerically on a grid, as we do in Chapter~\ref{ch:pde}. For larger~$d$, grid-based methods are infeasible due to the curse of dimensionality, and the ODE approximation of Chapter~\ref{ch:ode} becomes essential.
+
+
+% ==================================================================
+\section{Structure of the Hamiltonians}
+\label{sec:model-hamiltonians}
+
+The Hamiltonians~\eqref{eq:quoting-hamiltonian} and~\eqref{eq:hedging-hamiltonian} are defined abstractly as suprema over controls. We now evaluate them in closed form for the logistic fill probability~\eqref{eq:logistic} and the execution cost~\eqref{eq:execution-cost}. These closed forms are used by both the ODE approximation (Chapter~\ref{ch:ode}) and the PDE solver (Chapter~\ref{ch:pde}).
+
+
+% ------------------------------------------------------------------
+\subsection{Quoting Hamiltonian}
+\label{sec:model-H-quoting}
+
+For a general fill probability $f^n$ satisfying $f^n > 0$ and $(f^n)' < 0$, the objective $f^n(\delta)(\delta - p)$ in~\eqref{eq:quoting-hamiltonian} is continuous and vanishes as $\delta \to \infty$ (since $f^n \to 0$), so the supremum is attained at a finite~$\delta^*$. The first-order condition is
+\[
+  (f^n)'(\delta^*)\,(\delta^* - p) + f^n(\delta^*) = 0.
+\]
+For the logistic case~\eqref{eq:logistic}, the derivative is $(f^n)' = -\beta_n\,f^n(1-f^n)$. Substituting and dividing by $f^n(\delta^*) > 0$,
+\begin{equation}
+  \label{eq:foc-quoting}
+  \delta^* - p = \frac{1}{\beta_n\,(1 - f^*)},
+\end{equation}
+where $f^* = f^n(\delta^*)$ is the fill probability at the optimum. The optimal markup exceeds~$p$ by an amount that depends only on the price sensitivity $\beta_n$ and the fill probability $f^*$ itself. The less likely the fill, the larger the additional markup.
+
+To solve~\eqref{eq:foc-quoting} in closed form, we introduce the variable $w = f^*\!/(1 - f^*)$, the odds ratio of the fill probability at the optimal markup. Then $f^* = w/(w+1)$ and $1 - f^* = 1/(w+1)$, so~\eqref{eq:foc-quoting} gives $\delta^* = p + (w+1)/\beta_n$. The Hamiltonian value is
+\[
+  H^n(p) = f^*(\delta^* - p) = \frac{w}{w+1}\cdot\frac{w+1}{\beta_n} = \frac{w}{\beta_n}.
+\]
+It remains to determine $w$. From the logistic, $w = f^*\!/(1-f^*) = e^{-(\alpha_n + \beta_n\delta^*)}$. Substituting $\delta^* = p + (w+1)/\beta_n$:
+\[
+  w = e^{-(\alpha_n + \beta_n p + w + 1)},
+\]
+which rearranges to $w\,e^w = e^{-(1+\alpha_n+\beta_n p)}$. The solution is given by the Lambert $W$ function:
+\begin{equation}
+  \label{eq:lambert-w}
+  w = W_0\!\left(e^{-(1+\alpha_n+\beta_n p)}\right),
+\end{equation}
+where $W_0$ denotes the principal branch, defined as the unique function satisfying $W_0(x)\,e^{W_0(x)} = x$ for $x \geq 0$. Since $e^{-(1+\alpha_n+\beta_n p)} > 0$, the argument of $W_0$ is always positive, and $w > 0$. In summary, the quoting Hamiltonian and optimal markup are
+\begin{align}
+  H^n(p) &= \frac{w}{\beta_n}, \label{eq:H-closed}\\[3pt]
+  \delta^*(p) &= p + \frac{w + 1}{\beta_n}, \label{eq:delta-star}
+\end{align}
+with $w$ given by~\eqref{eq:lambert-w}.
+
+Two properties are worth recording. First, $H^n$ is convex and decreasing in $p$: when the inventory cost of a trade is high ($p$ large), the optimal expected profit from that event is lower. Second, the optimal markup $\delta^*(p)$ is increasing in $p$: the dealer charges more for trades that are costly to inventory. At $p = 0$, the markup reduces to the ``base spread'' $\delta^*(0) = (w_0 + 1)/\beta_n$, which depends only on the demand-curve parameters $\alpha_n$ and $\beta_n$, not on the inventory or any other model parameter. This observation foreshadows a key finding of the sensitivity analysis in Chapter~\ref{ch:sensitivity}: the base spread is driven entirely by the client demand curve.
+
+
+% ------------------------------------------------------------------
+\subsection{Hedging Hamiltonian}
+\label{sec:model-H-hedging}
+
+For the execution cost $L_{ij}(\xi) = \psi_{ij}\,|\xi| + \eta_{ij}\,\xi^2$, the hedging Hamiltonian~\eqref{eq:hedging-hamiltonian} can be evaluated by considering the three cases $\xi > 0$, $\xi < 0$, and $\xi = 0$ separately. When $\xi > 0$, the objective becomes $q\xi - \psi\xi - \eta\xi^2$, which is maximized at $\xi^* = (q - \psi)/(2\eta)$; this is positive only when $q > \psi$. When $\xi < 0$, the objective is $q\xi + \psi\xi - \eta\xi^2$, maximized at $\xi^* = (q + \psi)/(2\eta)$; this is negative only when $q < -\psi$. When $|q| \leq \psi$, the supremum is attained at $\xi = 0$. Combining:
+\begin{equation}
+  \label{eq:H-hedge-closed}
+  \mathcal{H}_{ij}(q) = \frac{\bigl(\max(|q| - \psi_{ij},\;0)\bigr)^2}{4\,\eta_{ij}},
+\end{equation}
+with optimal hedge rate
+\begin{equation}
+  \label{eq:optimal-hedge-rate}
+  \xi^*(q) = \begin{cases}
+    (q - \psi_{ij})\,/\,(2\eta_{ij}) & \text{if } q > \psi_{ij}, \\[2pt]
+    (q + \psi_{ij})\,/\,(2\eta_{ij}) & \text{if } q < -\psi_{ij}, \\[2pt]
+    0 & \text{if } |q| \leq \psi_{ij}.
+  \end{cases}
+\end{equation}
+
+The piecewise structure encodes two distinct regimes. The \emph{dead zone} $|q| \leq \psi$ is the region where the proportional spread cost outweighs the benefit of hedging: the value function gradient is too small to justify crossing the D2D spread. Outside the dead zone, the optimal hedge rate grows linearly in $|q|$ with slope $1/(2\eta)$. For the paper's parameters, $\eta \sim 10^{-9}$ in decimal units, so this slope is of order $5 \times 10^8$: even a modest gradient outside the dead zone produces an enormous hedging rate. This extreme sensitivity to the value function gradient is the dominant source of numerical stiffness when solving the HJB equation on a grid, as we discuss in Chapter~\ref{ch:pde}.
+
+\bigskip
+
+With the Hamiltonians evaluated in closed form, the HJB equation~\eqref{eq:hjb} is fully specified. The equation is a nonlinear PDE in $d$ spatial dimensions, with the nonlinearity concentrated in the quoting and hedging Hamiltonians. In the next chapter, we develop a tractable approximation that reduces this PDE to a system of matrix Riccati ODEs, making the problem computationally feasible even when $d$ is large.
