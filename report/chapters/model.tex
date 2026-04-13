@@ -21,10 +21,15 @@ where $\mu_i$ is the drift, $\sigma_i > 0$ the volatility, and $W_1, \ldots, W_d
 \]
 Since the reference currency has $\sigma_1 = 0$, the first row and column of $\Sigma$ vanish, and the effective randomness is $(d-1)$-dimensional.
 
-The dealer's inventory is described by a vector $Y(t) \in \R^d$, where $Y_i(t)$ represents the position in currency~$i$ valued in units of the reference currency. This accounting convention is central to the model. If the dealer holds $q_i$ units of currency~$i$, the reference-currency value of that position is $Y_i = q_i\,S_i$. Between trades, the quantity $q_i$ is constant, so the inventory inherits the dynamics of the exchange rate:
+The dealer's inventory is described by a vector $Y(t) \in \R^d$, where $Y_i(t)$ represents the position in currency~$i$ valued in units of the reference currency. This accounting convention is central to the model. The inventory changes from three sources --- mid-price movements, client trades, and hedging:
+\begin{equation}
+  \label{eq:inventory-decomp}
+  \dd Y = \dd Y^{(\text{price})} + \dd Y^{(\text{trade})} + \dd Y^{(\text{hedge})}.
+\end{equation}
+The following sections define each contribution in turn. If the dealer holds $q_i$ units of currency~$i$, the reference-currency value of that position is $Y_i = q_i\,S_i$. Between trades, the quantity $q_i$ is constant, so the inventory inherits the dynamics of the exchange rate. Since $Y_i = q_i\,S_i$, the contribution from mid-price movements is
 \begin{equation}
   \label{eq:inventory-mid}
-  \dd Y_i\big|_{\text{mid}} = q_i \, \dd S_i = Y_i\!\left(\mu_i \, \dd t + \sigma_i \, \dd W_i\right).
+  \dd Y_i^{(\text{price})} = Y_i\!\left(\mu_i \, \dd t + \sigma_i \, \dd W_i\right).
 \end{equation}
 The volatility of each inventory component thus scales with the position size: a larger holding in currency~$i$ entails proportionally more risk. The covariance between components $i$ and $j$ from exchange rate movements is $\Sigma_{ij}\,Y_i\,Y_j\,\dd t$, and the instantaneous variance of the total portfolio value is $Y^\T\Sigma\,Y$.
 
@@ -33,7 +38,7 @@ Trading in FX involves currency pairs rather than individual currencies. A trade
   \label{eq:inventory-trade}
   Y \;\longrightarrow\; Y + z\,d_{ij}.
 \end{equation}
-For each unordered pair $\{i, j\}$, there are two possible trade directions: $(i,j)$ and $(j,i)$. The dealer quotes on both sides independently.
+This is the trade contribution $\dd Y^{(\text{trade})}$ in~\eqref{eq:inventory-decomp}. For each unordered pair $\{i, j\}$, there are two possible trade directions: $(i,j)$ and $(j,i)$. The dealer quotes on both sides independently.
 
 The direction-vector representation reveals a structural property of the FX market that distinguishes it from equity or bond markets. Consider a setting with three currencies: USD~(1), EUR~(2), and GBP~(3). A client trade on the cross pair EUR/GBP, in which the dealer receives EUR and delivers GBP, changes the inventory by $z(e_2 - e_3)$. This is exactly the combined effect of receiving EUR against USD and delivering GBP against USD:
 \[
@@ -67,16 +72,16 @@ with tier-specific parameters $\alpha_n \in \R$ and $\beta_n > 0$. The parameter
 
 When a trade fills on directed pair~$(i,j)$ at size~$z_k$, two things happen simultaneously. The dealer earns revenue $z_k\,\delta$ from the markup, and the inventory changes by $z_k\,d_{ij}$ as in~\eqref{eq:inventory-trade}. These two effects --- profit from providing liquidity and inventory risk from acquiring a position --- are at the heart of the quoting optimization.
 
-In the paper's numerical example, the arrival rates are the same for both directions of a given pair and for all tiers: $\lambda^n_k = \lambda_k$ depends only on the trade size and the pair. This direction symmetry implies that client buy and sell flow are balanced on average, so the optimal strategy has no systematic directional bias. The tiers differ only in their demand-curve parameters $\alpha_n$ and $\beta_n$.
+In the paper's numerical example, the arrival rates depend only on the trade size and the pair, not on the tier or direction: $\lambda^n_k = \lambda_k$. This direction symmetry implies that client buy and sell flow are balanced on average, so the optimal strategy has no systematic directional bias. The tiers differ solely in their demand-curve parameters $\alpha_n$ and $\beta_n$.
 
 
 % ==================================================================
 \section{Hedging on the dealer-to-dealer market}
 \label{sec:model-hedging}
 
-In addition to skewing quotes, the dealer can manage inventory risk by trading on the dealer-to-dealer (D2D) segment of the market. For each canonical pair $\{i,j\}$ with $i < j$, the dealer chooses a continuous hedge rate $\xi_{ij}(t)$, measured in M\$ per unit time. A positive $\xi_{ij}$ means the dealer buys currency~$i$ and sells currency~$j$; a negative rate means the reverse. The hedge changes the inventory at rate
+In addition to skewing quotes, the dealer can manage inventory risk by trading on the dealer-to-dealer (D2D) segment of the market. For each canonical pair $\{i,j\}$ with $i < j$, the dealer chooses a continuous hedge rate $\xi_{ij}(t)$, measured in M\$ per unit time. A positive $\xi_{ij}$ means the dealer buys currency~$i$ and sells currency~$j$; a negative rate means the reverse. Hedging contributes an additional inventory drift:
 \[
-  \dd Y\big|_{\text{hedge}} = \sum_{\{i,j\},\; i < j} \xi_{ij}\, d_{ij}\, \dd t.
+  \dd Y^{(\text{hedge})} = \sum_{\{i,j\},\; i < j} \xi_{ij}\, d_{ij}\, \dd t.
 \]
 
 Hedging incurs execution costs. Each D2D trade carries a cost composed of two parts:
@@ -86,7 +91,7 @@ Hedging incurs execution costs. Each D2D trade carries a cost composed of two pa
 \end{equation}
 The first term, with $\psi_{ij} > 0$, is a proportional cost representing the bid-ask spread on the D2D market. It creates a threshold effect: small hedges are not worth the spread. The second term, with $\eta_{ij} > 0$, is a quadratic market impact cost that penalizes large or aggressive hedging. Together, the two terms create an incentive to hedge at moderate rates --- enough to reduce risk, but not so aggressively as to incur prohibitive costs.
 
-The full model of \cite{barzykin2023} also includes parameters~$k_i$ that account for permanent market impact of the dealer's hedging activity on the mid-prices. These modify the effective hedging momentum by a small correction proportional to the inventory and the value function gradient. In the paper's calibration, $k_i \sim 10^{-7}$, which is negligible relative to the other terms. We omit these parameters in what follows and set $k_i = 0$ throughout.
+The model also includes parameters~$k_i \geq 0$ that account for permanent market impact of the dealer's hedging activity on the mid-prices. These enter the hedging momentum~$q_{ij}$ in equation~\eqref{eq:hedging-momentum} as a correction that couples the optimal hedge rate to the current inventory and the value function gradient.
 
 
 % ==================================================================
@@ -114,33 +119,33 @@ By construction, $\theta(t,y)$ gives the maximum expected profit that the dealer
 \section{The Hamilton-Jacobi-Bellman equation}
 \label{sec:model-hjb}
 
-We derive the PDE governing the value function using the dynamic programming principle. The idea is to consider the system's evolution over an infinitesimal time interval $[t, t + \dd t]$ and require that the value function be consistent with optimality. Three types of events can occur in this interval: exchange rates move continuously, a client trade may arrive and fill, and the dealer hedges continuously.
+We derive the PDE governing the value function using the dynamic programming principle. The idea is to consider the system's evolution over an infinitesimal time interval $[t, t + \dd t]$ and identify the conditions under which~$\theta$ cannot be locally improved. Three types of events can occur in this interval: exchange rates move continuously, a client trade may arrive and fill, and the dealer hedges continuously.
 
 \paragraph{Continuous dynamics.}
 Between client trades, the inventory evolves smoothly from mid-price movements~\eqref{eq:inventory-mid} and the hedging drift. Applying It\^{o}'s formula to $\theta(t, Y(t))$ along the continuous component, the expected infinitesimal change in~$\theta$ is
 \begin{align*}
-  \E\!\left[\dd\theta\big|_{\text{cont}}\right] = \Biggl(&\partial_t\theta + \frac{1}{2}\sum_{i,j=1}^d \Sigma_{ij}\,y_i\,y_j\,\frac{\partial^2\theta}{\partial y_i\,\partial y_j} + \sum_{i=1}^d \mu_i\,y_i\,\frac{\partial\theta}{\partial y_i}\\
+  \E\!\left[\dd\theta^{(\text{cont})}\right] = \Biggl(&\partial_t\theta + \frac{1}{2}\sum_{i,j=1}^d \Sigma_{ij}\,y_i\,y_j\,\frac{\partial^2\theta}{\partial y_i\,\partial y_j} + \sum_{i=1}^d \mu_i\,y_i\,\frac{\partial\theta}{\partial y_i}\\
   &+ \sum_{\{i,j\}} \xi_{ij}\!\left(\frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j}\right)\Biggr) \dd t.
 \end{align*}
 The second-order term arises from the quadratic covariation of the Brownian-driven inventory components. The drift from mid-price movements contributes through $\mu_i\,y_i$; in the paper's example, $\mu = 0$, so this term vanishes. The hedging drift couples each canonical pair to the value function gradient.
 
 \paragraph{Client trades.}
-Client trades arrive as Poisson jumps superimposed on the continuous dynamics. In $[t, t + \dd t]$, the probability that a request arrives on directed pair~$(i,j)$, tier~$n$, size~$z_k$ and the client fills is $\lambda^n_k\,f^n(\delta^n_{ij,k})\,\dd t$. A filled trade earns revenue $z_k\,\delta^n_{ij,k}$ and shifts the continuation value from $\theta(t, y)$ to $\theta(t, y + z_k\,d_{ij})$. The expected contribution from all quoting events in $[t, t+\dd t]$ is therefore
+Client trades arrive as Poisson jumps alongside the continuous dynamics. In $[t, t + \dd t]$, the probability that a request arrives on directed pair~$(i,j)$, tier~$n$, size~$z_k$ and the client fills is $\lambda^n_k\,f^n(\delta^n_{ij,k})\,\dd t$. A filled trade earns revenue $z_k\,\delta^n_{ij,k}$ and shifts the continuation value from $\theta(t, y)$ to $\theta(t, y + z_k\,d_{ij})$. The expected contribution from all quoting events in $[t, t+\dd t]$ is therefore
 \[
   \sum_{(i,j),\,n,\,k} \lambda^n_k\,f^n\!\left(\delta^n_{ij,k}\right) \left[z_k\,\delta^n_{ij,k} + \theta(t, y + z_k\,d_{ij}) - \theta(t,y)\right] \dd t.
 \]
-Each summand combines the immediate profit from the markup with the change in future value from the inventory shift. The markup~$\delta$ controls the trade-off: a higher markup earns more per fill but reduces the fill probability.
+Each term in the sum combines the immediate profit from the markup with the change in future value from the inventory shift. The markup~$\delta$ controls the trade-off: a higher markup earns more per fill but reduces the fill probability.
 
 \paragraph{Assembling the HJB equation.}
-The dynamic programming principle requires that, under the optimal controls, the expected infinitesimal change in $\theta$ plus the flow payoff equals zero. Combining the continuous and jump contributions, subtracting the hedging costs and the running penalty, and requiring optimality, we obtain
+If the dealer is already following the optimal strategy, then the value function~$\theta$ --- which represents the maximum expected future payoff --- must be consistent with the payoff collected at each instant. Over $[t, t + \dd t]$, the dealer collects flow income (client revenue minus hedging costs minus the risk penalty) and the continuation value~$\theta$ changes due to the inventory dynamics. These two effects must balance exactly: any net gain would contradict the fact that~$\theta$ is already the supremum over all strategies. Combining the continuous and jump contributions derived above and imposing this balance condition, we obtain
 \begin{align}
   0 = \partial_t\theta &+ \frac{1}{2}\sum_{i,j=1}^d \Sigma_{ij}\,y_i\,y_j\,\frac{\partial^2\theta}{\partial y_i\,\partial y_j} + \sum_{i=1}^d \mu_i\,y_i\,\frac{\partial\theta}{\partial y_i} - \frac{\gamma}{2}\,y^\T\!\Sigma\,y \notag\\
   &+ \sup_{\delta}\;\sum_{(i,j),\,n,\,k} \lambda^n_k\,f^n(\delta^n_{ij,k})\left[z_k\,\delta^n_{ij,k} + \theta(y + z_k\,d_{ij}) - \theta(y)\right] \notag\\
   &+ \sup_{\xi}\;\sum_{\{i,j\}}\left[\xi_{ij}\!\left(\frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j}\right) - L_{ij}(\xi_{ij})\right]. \label{eq:hjb-raw}
 \end{align}
-A crucial simplification now takes place. In the quoting supremum, the markup $\delta^n_{ij,k}$ for each combination of pair, tier, and size enters only its own summand, so the joint optimization separates into independent scalar problems. Rearranging the quoting contribution for a single event:
+A crucial simplification now takes place. In the quoting supremum, the markup $\delta^n_{ij,k}$ for each combination of pair, tier, and size enters only through its own term in the sum, so the joint optimization separates into independent scalar problems. Rearranging the quoting contribution for a single event:
 \[
-  \sup_{\delta}\; f^n(\delta)\left[z_k\,\delta + \theta(y + z_k\,d_{ij}) - \theta(y)\right] = z_k\sup_{\delta}\; f^n(\delta)\!\left(\delta - \frac{\theta(y) - \theta(y + z_k\,d_{ij})}{z_k}\right).
+  \sup_{\delta}\; f^n(\delta)\left[z_k\,\delta + \theta(y + z_k\,d_{ij}) - \theta(y)\right] = z_k\sup_{\delta}\; f^n(\delta)\!\left[\delta - \frac{\theta(y) - \theta(y + z_k\,d_{ij})}{z_k}\right].
 \]
 The quantity
 \begin{equation}
@@ -162,9 +167,9 @@ Similarly, the hedge rate $\xi_{ij}$ for each canonical pair enters only through
 evaluated at
 \begin{equation}
   \label{eq:hedging-momentum}
-  q_{ij} = \frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j},
+  q_{ij} = \frac{\partial\theta}{\partial y_i} - \frac{\partial\theta}{\partial y_j} + k_i\,y_i\!\left(1 + \frac{\partial\theta}{\partial y_i}\right) - k_j\,y_j\!\left(1 + \frac{\partial\theta}{\partial y_j}\right),
 \end{equation}
-the difference in marginal values between the two currencies. The hedging Hamiltonian~\eqref{eq:hedging-hamiltonian} is precisely the Legendre--Fenchel transform of the execution cost~$L_{ij}$, a connection to convex duality that will yield the closed-form evaluation in Section~\ref{sec:model-hamiltonians}.
+which combines the difference in marginal values between the two currencies with a permanent market impact correction. We evaluate the hedging Hamiltonian~\eqref{eq:hedging-hamiltonian} in closed form in Section~\ref{sec:model-hamiltonians}.
 
 Substituting the Hamiltonians into~\eqref{eq:hjb-raw}, the HJB equation takes the compact form
 \begin{align}
@@ -183,16 +188,16 @@ The terminal condition is
   \theta(T, y) = -y^\T\!\kappa\,y.
 \end{equation}
 
-Equation~\eqref{eq:hjb} is the central object of this thesis. Each term has a clear interpretation. The diffusion term $\frac{1}{2}\operatorname{Tr}(\mathcal{D}(y)\,\Sigma\,\mathcal{D}(y)\,D^2_{yy}\theta)$ captures how exchange rate movements affect the value function through the inventory: it is the infinitesimal generator of the log-normal inventory process~\eqref{eq:inventory-mid}. The running penalty $-\frac{\gamma}{2}\,y^\T\!\Sigma\,y$ is the instantaneous cost of holding a risky inventory. The quoting Hamiltonian~$Q$ aggregates the optimal expected profit from all client quoting events. The hedging Hamiltonian~$\mathcal{H}_{\text{hedge}}$ captures the net benefit of optimal hedging on each D2D pair. Together, the four terms express the fundamental balance of market making: the dealer earns from providing liquidity ($Q > 0$) and from hedging efficiently ($\mathcal{H}_{\text{hedge}} \geq 0$), while paying a price for carrying risk ($-\frac{\gamma}{2}\,y^\T\!\Sigma\,y < 0$ when $y \neq 0$).
+Equation~\eqref{eq:hjb} is the central object of this thesis. Each term has a clear interpretation. The diffusion term $\frac{1}{2}\operatorname{Tr}(\mathcal{D}(y)\,\Sigma\,\mathcal{D}(y)\,D^2_{yy}\theta)$ captures how exchange rate movements affect the value function through the inventory: it arises from applying It\^{o}'s formula to the inventory process~\eqref{eq:inventory-mid}. The running penalty $-\frac{\gamma}{2}\,y^\T\!\Sigma\,y$ is the instantaneous cost of holding a risky inventory. The quoting Hamiltonian~$Q$ aggregates the optimal expected profit from all client quoting events. The hedging Hamiltonian~$\mathcal{H}_{\text{hedge}}$ captures the net benefit of optimal hedging on each D2D pair. Together, the four terms express the fundamental balance of market making: the dealer earns from providing liquidity ($Q > 0$) and from hedging efficiently ($\mathcal{H}_{\text{hedge}} \geq 0$), while paying a price for carrying risk ($-\frac{\gamma}{2}\,y^\T\!\Sigma\,y < 0$ when $y \neq 0$).
 
-The HJB equation is a nonlinear PDE in $d$ spatial dimensions. The nonlinearity enters through the Hamiltonians: both $H^n$ and $\mathcal{H}_{ij}$ involve suprema over controls. Moreover, the quoting Hamiltonian is nonlocal in $y$ because $\theta(y + z_k\,d_{ij})$ couples each point to its neighbors at distance $z_k$ in the direction~$d_{ij}$. For $d \leq 3$, the equation can be solved numerically on a grid, as we do in Chapter~\ref{ch:pde}. For larger~$d$, grid-based methods are infeasible due to the curse of dimensionality, and the ODE approximation of Chapter~\ref{ch:ode} becomes essential.
+The HJB equation is a nonlinear PDE in $d$ spatial dimensions. The nonlinearity enters through the Hamiltonians: both $H^n$ and $\mathcal{H}_{ij}$ involve suprema over controls. Moreover, the quoting Hamiltonian is nonlocal in $y$ because $\theta(y + z_k\,d_{ij})$ couples each point to its neighbors at distance $z_k$ in the direction~$d_{ij}$. For $d \leq 3$, the equation can be solved numerically on a grid, as we do in Chapter~\ref{ch:pde}. For larger~$d$, grid-based methods are infeasible because the number of grid points grows as~$n^d$, where~$n$ is the number of points per axis, and the ODE approximation of Chapter~\ref{ch:ode} becomes essential.
 
 
 % ==================================================================
 \section{Structure of the Hamiltonians}
 \label{sec:model-hamiltonians}
 
-The Hamiltonians~\eqref{eq:quoting-hamiltonian} and~\eqref{eq:hedging-hamiltonian} are defined abstractly as suprema over controls. We now evaluate them in closed form for the logistic fill probability~\eqref{eq:logistic} and the execution cost~\eqref{eq:execution-cost}. These closed forms are used by both the ODE approximation (Chapter~\ref{ch:ode}) and the PDE solver (Chapter~\ref{ch:pde}).
+The Hamiltonians~\eqref{eq:quoting-hamiltonian} and~\eqref{eq:hedging-hamiltonian} are defined abstractly as suprema over controls. We now evaluate them in closed form for the logistic fill probability~\eqref{eq:logistic} and the execution cost~\eqref{eq:execution-cost}. These closed forms are used directly by the PDE solver (Chapter~\ref{ch:pde}) and indirectly by the ODE approximation (Chapter~\ref{ch:ode}), which takes a Taylor expansion of the quoting Hamiltonian around zero momentum.
 
 
 % ------------------------------------------------------------------
