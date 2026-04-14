@@ -109,6 +109,19 @@ Also available: `solve_hjb_implicit_continuation` for η-continuation (solving w
 - No test suite yet — verify correctness by running the reproduction notebook and comparing against paper values
 - `B0 = 0` in the paper's example because parameters are direction-symmetric (`M̄` symmetric, `V = 0`, `μ = 0`)
 
+## Writing Style (report/thesis)
+
+When writing or editing LaTeX prose for the report, avoid patterns that sound like AI-generated text:
+
+- **No em dashes.** Use commas, parentheses, or separate sentences instead.
+- **Banned words/phrases:** "delve", "notably", "crucially", "importantly", "it is worth noting", "it is important to note", "in the realm of", "a nuanced understanding", "multifaceted", "comprehensive overview", "sheds light on", "plays a crucial/pivotal role", "leveraging", "harnessing", "landscape" (as metaphor), "robust" (unless statistically precise), "straightforward" (as filler).
+- **No throat-clearing.** Don't open with "It is well known that..." or "In what follows, we...". Just state the fact.
+- **No redundant signposting.** Don't summarize what was just said. Don't end every section with a broad takeaway that adds nothing.
+- **Vary sentence and paragraph length.** Avoid uniform clause-heavy constructions. Short sentences are fine.
+- **Be direct.** "Figure 3 confirms" not "Figure 3 sheds light on". "We show" not "we delve into".
+- **No hedging stacks.** Don't write "may potentially help to somewhat mitigate". Pick one qualifier or none.
+- **Avoid excessive parallelism.** Not every list needs three items. Not every paragraph needs the same structure.
+
 ## Git
 
 - Never add `Co-Authored-By` lines to commits.

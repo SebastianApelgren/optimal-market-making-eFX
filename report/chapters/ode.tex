@@ -1,7 +1,7 @@
 \chapter{The ODE Approximation}
 \label{ch:ode}
 
-The HJB equation~\eqref{eq:hjb} derived in Chapter~\ref{ch:model} is a nonlinear PDE in $d$ spatial dimensions. For a market with five currencies, the inventory state space is five-dimensional, and solving the equation on a grid would require a mesh with $n^5$ points, clearly infeasible for any reasonable resolution. Even for two or three currencies, the nonlocal coupling through the quoting Hamiltonian and the extreme stiffness of the hedging term make the PDE challenging to solve numerically, as we shall see in Chapter~\ref{ch:pde}. A tractable approximation is therefore essential if the model is to be of any practical use beyond the smallest cases.
+The HJB equation~\eqref{eq:hjb} derived in Chapter~\ref{ch:model} is a nonlinear PDE in $d$ spatial dimensions. For a market with five currencies, the inventory state space is five-dimensional, and solving the equation on a grid would require a mesh with $n^5$ points, clearly infeasible for any reasonable resolution. Even for two or three currencies, the quoting Hamiltonian and the extreme stiffness of the hedging term make the PDE~\eqref{eq:hjb} challenging to solve numerically, as we shall see in Chapter~\ref{ch:pde}. A tractable approximation is therefore essential if the model is to be of any practical use beyond the smallest cases.
 
 The key idea, introduced by Bergault, Evangelista, Gu\'{e}ant, and Vieira~\cite{bergault2021} in the context of multi-asset market making and adapted to the multi-currency setting by Barzykin, Bergault, and Gu\'{e}ant~\cite{barzykin2023}, is to replace the exact Hamiltonians with quadratic approximations and to seek the value function in a quadratic form. When both the Hamiltonian and the value function are quadratic in the inventory, substituting the ansatz into the HJB equation produces expressions that are polynomial in~$y$, and matching coefficients reduces the problem to a system of ordinary differential equations for the matrix and vector coefficients of the quadratic form. The resulting system is a matrix Riccati ODE whose dimension is $d \times d$, scaling with the number of currencies rather than the number of grid points. For the five-currency example of~\cite{barzykin2023}, the system involves $5 \times 5$ matrices and can be solved in milliseconds on a standard computer.
 
@@ -12,7 +12,7 @@ This chapter derives the approximation, presents the resulting formulas for opti
 \section{Quadratic approximation of the Hamiltonian}
 \label{sec:ode-quadratic-H}
 
-The quoting Hamiltonian $H^n(p)$ derived in Section~\ref{sec:model-H-quoting} is a smooth function of the momentum~$p$, which measures the per-unit cost to the value function of acquiring inventory from a client trade. The momentum depends on the value function evaluated at two nearby points: $p = (\theta(y) - \theta(y + z\,d_{ij}))/z$. For moderate inventories, the change in~$\theta$ over a distance~$z$ in direction~$d_{ij}$ is small relative to the spread the dealer charges, so $p$ is close to zero. The idea is to replace $H^n(p)$ by its second-order Taylor expansion around $p = 0$:
+The quoting Hamiltonian $H^n(p)$ derived in Section~\ref{sec:model-H-quoting} gives the optimal profit from quoting on tier~$n$ as a smooth function of the momentum~$p$, the per-unit inventory cost of the trade. The momentum depends on the value function evaluated at two nearby points: $p = (\theta(y) - \theta(y + z\,d_{ij}))/z$. For moderate inventories, the change in~$\theta$ over a distance~$z$ in direction~$d_{ij}$ is small relative to the spread the dealer charges, so $p$ is close to zero. The idea is to replace $H^n(p)$ by its second-order Taylor expansion around $p = 0$:
 \begin{equation}
   \label{eq:H-quadratic}
   \hat{H}^n(p) = \alpha_0^n + \alpha_1^n\, p + \frac{1}{2}\,\alpha_2^n\, p^2,
@@ -27,18 +27,18 @@ with coefficients
 
 The zeroth-order coefficient $\alpha_0^n = H^n(0)$ is the optimal expected profit rate from a quoting event when the inventory cost is zero. This is the base-case revenue: what the dealer earns from providing liquidity in the absence of any inventory pressure.
 
-The first-order coefficient is $\alpha_1^n = -f^n(\delta^*(0))$, the negative of the fill probability at the zero-inventory optimal markup. Since $H^n$ is decreasing in~$p$ (a higher inventory cost reduces the profit from quoting), $\alpha_1^n$ is negative. The economic content is clear: when the inventory cost of a trade increases by one unit, the expected profit from that event decreases by approximately the fill probability. The connection to the first derivative can be seen from the envelope theorem: $\partial_p H^n(p) = -f^n(\delta^*(p))$, since increasing $p$ by $\dd p$ reduces the net payoff $\delta - p$ by $\dd p$ at every~$\delta$, and the expected loss is $f^*\,\dd p$ at the optimum.
+The first-order coefficient is $\alpha_1^n = -f^n(\delta^*(0))$, the negative of the fill probability at the zero-inventory optimal markup. Since $H^n$ is decreasing in~$p$ (a higher inventory cost reduces the profit from quoting), $\alpha_1^n$ is negative. To see why $\alpha_1^n$ equals the fill probability, consider increasing the inventory cost $p$ by a small amount $\dd p$. The dealer earns $\delta - p$ on each fill, so the payoff per fill drops by $\dd p$. The dealer could partially compensate by adjusting $\delta$, but at the optimum this adjustment has no first-order effect, since $\delta^*$ already maximizes the expected profit. The full expected loss is therefore $f^n(\delta^*(0))\,\dd p$, giving $\partial_p H^n(0) = -f^n(\delta^*(0))$.
 
-The second-order coefficient $\alpha_2^n$ is positive (since $H^n$ is convex) and captures the curvature of the Hamiltonian at zero. It controls how quickly the optimal profit deteriorates as the momentum departs from zero. In practice, $\alpha_2^n$ is computed numerically by finite differencing the derivative $(H^n)'(p) = -f^n(\delta^*(p))$ around $p = 0$.
+The second-order coefficient $\alpha_2^n$ is positive (since $H^n$ is convex) and measures the curvature of $H^n$ at $p = 0$. A larger $\alpha_2^n$ means that the quoting profit is more sensitive to inventory pressure: as the momentum $p$ grows, the profit deteriorates more rapidly. In practice, $\alpha_2^n$ is computed numerically by finite differencing the derivative $(H^n)'(p) = -f^n(\delta^*(p))$ around $p = 0$.
 
-For the hedging Hamiltonian $\mathcal{H}_{ij}$, the situation is simpler. The full Hamiltonian~\eqref{eq:H-hedge-closed} involves a dead zone $|q| \leq \psi_{ij}$ created by the proportional spread cost. When $\psi_{ij} > 0$, the Hamiltonian is not differentiable at~$q = 0$, and a Taylor expansion around zero would not capture the dead zone structure. The approximation adopted in~\cite{barzykin2023} is to set $\psi_{ij} = 0$ in the hedging Hamiltonian, reducing it to $\mathcal{H}_{ij}(q) = q^2/(4\eta_{ij})$, which is already quadratic. The proportional cost is retained in the formula for the optimal hedge rate after the value function has been computed; it only drops out of the Riccati ODE derivation.
+For the hedging Hamiltonian $\mathcal{H}_{ij}$, the situation is simpler. The full Hamiltonian~\eqref{eq:H-hedge-closed} involves a dead zone $|q| \leq \psi_{ij}$ created by the proportional spread cost. When $\psi_{ij} > 0$, the Hamiltonian is not differentiable at~$q = 0$, and a Taylor expansion around zero would not capture the dead zone structure. The approximation adopted in~\cite{barzykin2023} is to set $\psi_{ij} = 0$ in the hedging Hamiltonian. This removes the dead zone and reduces the Hamiltonian to $\mathcal{H}_{ij}(q) = q^2/(4\eta_{ij})$, which is purely quadratic and compatible with the ansatz framework. The proportional cost is not discarded entirely: once $A$ and $B$ have been obtained from the Riccati ODE, the actual hedge rate is computed using the full piecewise formula~\eqref{eq:optimal-hedge-rate}, which reinstates the dead zone.
 
 
 % ==================================================================
 \section{The quadratic ansatz and Riccati system}
 \label{sec:ode-ansatz}
 
-We seek an approximate value function of the form
+Since the Hamiltonians have been approximated as quadratic in $p$, and $p$ is itself linear in $y$, the HJB right-hand side will be at most quadratic in $y$ if the value function is also quadratic. We therefore seek an approximate value function of the most general quadratic form in $y$ with time-dependent coefficients:
 \begin{equation}
   \label{eq:ansatz}
   \hat\theta(t, y) = -y^\T A(t)\,y - y^\T B(t) - C(t),
@@ -50,7 +50,7 @@ With this ansatz, the gradient of~$\hat\theta$ with respect to~$y$ is $\nabla_y\
   \label{eq:p-ansatz}
   p = \frac{\hat\theta(y) - \hat\theta(y + z\,d_{ij})}{z} = \bigl((2y + z\,d_{ij})^\T A + B^\T\bigr)\,d_{ij},
 \end{equation}
-which is linear in~$y$. When this linear expression for~$p$ is substituted into the quadratic Hamiltonian approximation~\eqref{eq:H-quadratic}, the result is a polynomial of degree two in~$y$. Similarly, the hedging terms, the diffusion term, and the risk penalty in the HJB are all at most quadratic in~$y$ under the ansatz~\eqref{eq:ansatz}. Collecting the coefficients of $y^\T(\cdot)\,y$, $y^\T(\cdot)$, and the constant terms on both sides of the HJB equation yields separate ODEs for~$A$, $B$, and~$C$. The detailed algebra of this coefficient matching is worked out in~\cite{bergault2021} for the general multi-asset case. We state the result.
+which is linear in~$y$. When this linear expression for~$p$ is substituted into the quadratic Hamiltonian approximation~\eqref{eq:H-quadratic}, the result is a polynomial of degree two in~$y$. Similarly, the hedging terms, the diffusion term, and the risk penalty in the HJB are all at most quadratic in~$y$ under the ansatz~\eqref{eq:ansatz}. Collecting the coefficients of $y^\T(\cdot)\,y$, $y^\T(\cdot)$, and the constant terms on both sides of the HJB equation yields separate ODEs for~$A$, $B$, and~$C$. The detailed derivation of this coefficient matching is worked out in~\cite{bergault2021} for the general multi-asset case. We state the result.
 
 The matrix~$A$ satisfies the Riccati-type equation
 \begin{equation}
@@ -94,7 +94,7 @@ and the $A$-dependent quantity $\tilde{V}(A)$ is
 \end{equation}
 where $\overline{V}(A) = \overline{\mathcal{D}}(A)\,P + P\,\overline{\mathcal{D}}(A) - 2(P \odot A)$ and $\overline{\mathcal{D}}(A)$ denotes the diagonal matrix with the same diagonal as $A$.
 
-The hedging Hamiltonian (with $\psi = 0$) contributes to the Riccati equation through the term $2A\,M\,A$ in~\eqref{eq:riccati-A}. More precisely, $M$ incorporates both quoting and hedging contributions: the hedging part adds $1/(4\eta_{ij})$ to the effective curvature at each pair $\{i,j\}$, amplifying the coefficient of $A^2$ in the Riccati equation. This coupling is what links hedging to the quoting strategy through the matrix~$A$.
+The hedging Hamiltonian (with $\psi = 0$) contributes to the Riccati equation through the term $2A\,M\,A$ in~\eqref{eq:riccati-A}. More precisely, $M$ incorporates both quoting and hedging contributions: the hedging part adds $1/(4\eta_{ij})$ to the effective curvature at each pair $\{i,j\}$, amplifying the coefficient of $A^2$ in the Riccati equation. This is what links hedging to the quoting strategy through the matrix~$A$.
 
 The system~\eqref{eq:riccati-A}--\eqref{eq:riccati-B} is integrated backward in time from $T$ to $0$ using an explicit Euler scheme, as in~\cite{barzykin2023}. For the parameters considered in this thesis, the solution converges to a stationary value well before $t = 0$: the matrices $A(0)$ and $B(0)$ are unchanged (to machine precision) whether $T$ is set to $0.05$~days or $5$~days. We therefore use the stationary values $A(0)$ and $B(0)$ throughout, consistent with the paper's approach of computing the strategy ``to mimic what would happen in the stationary case''~\cite[p.~6]{barzykin2023}.
 
@@ -107,7 +107,7 @@ Once $A$ and $B$ are known, the approximate optimal strategy follows directly fr
 
 \subsection{Optimal markup}
 
-For a client request on directed pair $(i,j)$, tier~$n$, at trade size~$z$, the approximate momentum is
+The dealer's optimal markup on each trade depends on a single scalar, the momentum $p$, which summarises how the trade would affect the value function. For a client request on directed pair $(i,j)$, tier~$n$, at trade size~$z$, the approximate momentum is
 \begin{equation}
   \label{eq:p-formula}
   p = \bigl((2y + z\,d_{ij})^\T A + B^\T\bigr)\,d_{ij},
@@ -118,28 +118,29 @@ The momentum~\eqref{eq:p-formula} is linear in~$y$, so the markup $\delta^*$ is 
 
 \subsection{Optimal hedge rate}
 
-For a canonical pair $\{i,j\}$, the hedging momentum under the ansatz is
+The hedge rate on each currency pair is determined by a hedging momentum $q_{ij}$ that aggregates the value function gradient, the direction of the hedge, and permanent market impact. For a canonical pair $\{i,j\}$, the hedging momentum under the ansatz is
 \begin{equation}
   \label{eq:q-formula}
   q_{ij} = -(2Ay + B)^\T d_{ij} + k_i\,y_i\!\left(1 - (2Ay + B)_i\right) - k_j\,y_j\!\left(1 - (2Ay + B)_j\right),
 \end{equation}
-combining the value function gradient along~$d_{ij}$ with the permanent market impact correction. The optimal hedge rate is then given by the piecewise formula~\eqref{eq:optimal-hedge-rate} from Chapter~\ref{ch:model}. Note that the proportional cost~$\psi_{ij}$ reappears here: although it was set to zero in the Riccati derivation, it is reinstated when computing the actual hedge rate. This means that the dead zone is preserved in the approximate strategy, even though the Riccati system does not explicitly account for it.
+combining the value function gradient along~$d_{ij}$ with the permanent market impact correction. The optimal hedge rate is then given by the piecewise formula~\eqref{eq:optimal-hedge-rate} from Chapter~\ref{ch:model}, applied to~$q_{ij}$. The proportional cost~$\psi_{ij}$, which was set to zero in the Riccati derivation, reappears in this formula: the dead zone $|q_{ij}| \leq \psi_{ij}$ is reinstated when computing the actual hedge rate, so the approximate strategy still preserves the pure internalization region even though the Riccati system does not account for it.
 
 
 % ==================================================================
 \section{Parameters}
 \label{sec:ode-params}
 
-For the numerical illustrations in this chapter and the remainder of the thesis, we use the parameter set from Table~1 of~\cite{barzykin2023}, which describes a market with five currencies: USD (reference), EUR, JPY, GBP, and CHF. The dealer quotes on all ten currency pairs through two client tiers and a pricing ladder with five trade sizes $z \in \{1, 5, 10, 20, 50\}$~M\$. We reproduce the full parameter set in Tables~\ref{tab:params-direct} and~\ref{tab:params-crosses}.
+For the numerical illustrations in this chapter, we use the parameter values from Table~1 of~\cite{barzykin2023}, which describes a market with five currencies: USD (reference), EUR, JPY, GBP, and CHF. Later chapters restrict to two or three currencies for computational reasons while retaining the same calibrated values. The dealer quotes on all ten currency pairs through two client tiers and a pricing ladder with five trade sizes $z \in \{1, 5, 10, 20, 50\}$~M\$. We reproduce the full parameter set in Tables~\ref{tab:params-direct} and~\ref{tab:params-crosses}.
 
-The parameters have been calibrated from data at HSBC's FX market making franchise, as described in~\cite{barzykin2022risk}. They should not be taken as representative of HSBC specifically, but rather of a typical top-tier FX dealer. Several features of the calibration are worth noting. The arrival rates decrease with trade size, reflecting the well-known pattern that small trades are far more frequent than large ones. The two tiers differ mainly in their logistic parameters: tier~1 has more negative~$\alpha$ values (higher base fill probabilities) and larger~$\beta$ values (greater price sensitivity), consistent with a more aggressive and price-sensitive client base. The execution costs are smallest for the most liquid pair (EURUSD) and largest for the illiquid crosses.
+The parameters have been calibrated from data at HSBC's FX market making franchise, as described in~\cite{barzykin2022risk}. They should not be taken as representative of HSBC specifically, but rather of a typical top-tier FX dealer. Several features of the calibration are worth noting. The arrival rates decrease with trade size, reflecting the well-known pattern that small trades are far more frequent than large ones. The two tiers differ mainly in their logistic parameters: tier~1 has more negative~$\alpha$ values (higher base fill probabilities) and larger~$\beta$ values (greater price sensitivity), consistent with a more aggressive and price-sensitive client base. The execution costs ($\psi$ and $\eta$) are smallest for the most liquid pair (EURUSD) and largest for the illiquid crosses.
 
-Throughout this chapter, the drift is set to $\mu = 0$, the terminal penalty to $\kappa = 0$, and the time horizon to $T = 0.05$ days (72 minutes). The combination of zero drift and zero terminal penalty, together with direction-symmetric arrival rates, implies that $B(0) = 0$: the optimal strategy is symmetric around zero inventory, with no directional bias.
+Throughout this chapter, the drift is set to $\mu = 0$, the terminal penalty to $\kappa = 0$, and the time horizon to $T = 0.05$ days (72~minutes), large enough for the Riccati solution to reach stationarity (see Section~\ref{sec:ode-ansatz}). The combination of zero drift and zero terminal penalty, together with direction-symmetric arrival rates, implies that $B(0) = 0$: the optimal strategy is symmetric around zero inventory, with no directional bias.
 
 \begin{table}[ht]
 \centering
 \caption{Parameters for direct (USD-based) currency pairs, from Table~1 of~\cite{barzykin2023}. The size ladder $z \in \{1, 5, 10, 20, 50\}$~M\$ is the same for all pairs. Two client tiers with different logistic parameters $(\alpha, \beta)$ are defined for each pair. Arrival rates $\lambda(z)$ are in trades per day and are the same for both tiers.}
 \label{tab:params-direct}
+\makebox[\textwidth][c]{%
 \begin{tabular}{@{}lcccccccc@{}}
 \toprule
 Pair & $\sigma$ & $\lambda(z)$ & $\alpha$ & $\beta$ & $\psi$ & $\eta$ & $k$ \\
@@ -150,7 +151,7 @@ GBPUSD & 70 & 600, 200, 150, 40, 10 & $-1.4,\;\phantom{-}0.0$ & $5.5,\;2.0$ & 0.
 CHFUSD & 60 & 420, 140, 105, 28, 7 & $-1.2,\;\phantom{-}0.0$ & $4.5,\;1.9$ & 0.25 & $2.5 \times 10^{-5}$ & $8 \times 10^{-3}$ \\
 JPYUSD & 60 & 825, 375, 180, 105, 15 & $-1.6,\;-0.1$ & $9.0,\;3.0$ & 0.1 & $1.5 \times 10^{-5}$ & $6 \times 10^{-3}$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}% end makebox
 \end{table}
 
 \begin{table}[ht]
@@ -186,7 +187,7 @@ We now apply the ODE approximation to the five-currency parameter set of Section
 
 Figure~\ref{fig:ode-quotes} shows the optimal top-of-book markups ($z = 1$~M\$, tier~1) for three currency pairs as functions of GBP inventory, with all other inventories held at zero. The three pairs are chosen to illustrate different aspects of the multi-currency structure: GBPUSD is a direct pair involving GBP, EURUSD is a direct pair not involving GBP, and EURGBP is a cross pair. For each pair, we plot the bid and ask markups, so that the vertical distance between the two curves at a given inventory level is the full bid-ask spread.
 
-The GBPUSD pricing follows the pattern familiar from single-pair market making models. As the GBP inventory increases, the dealer raises the ask markup (making it more expensive for clients to buy GBP) and lowers the bid markup (making it cheaper for clients to sell GBP), widening the ask side and tightening the bid side to attract risk-reducing flow. The skew is approximately linear in inventory, a direct consequence of the quadratic value function: the momentum $p$ is linear in $y$ under the ansatz~\eqref{eq:ansatz}.
+The GBPUSD pricing follows the pattern familiar from single-pair market making models. As the GBP inventory increases, the dealer lowers the ask markup (making it cheaper for clients to buy GBP from the dealer) and raises the bid markup (offering a worse price for clients selling GBP to the dealer), tightening the ask side and widening the bid side to attract risk-reducing flow. The skew is approximately linear in inventory, a direct consequence of the quadratic value function: the momentum $p$ is linear in $y$ under the ansatz~\eqref{eq:ansatz}.
 
 More interesting is the EURUSD pricing. In a model without cross pairs and without correlations between exchange rates, the EURUSD markup would be flat as a function of GBP inventory. Here, however, the EURUSD curves also skew with the GBP position. This happens for two reasons. First, EURUSD and GBPUSD are positively correlated ($\rho = 0.6$), so a long GBP position also represents indirect EUR exposure: the risk of the combined position is lower when the EUR inventory is reduced. The matrix~$A$ captures this through its off-diagonal entry $A_{\text{EUR},\text{GBP}}$, which couples the GBP inventory to the EURUSD momentum. Second, the EURGBP cross pair provides a direct channel through which GBP inventory affects the EUR quoting momentum. The cross pair is itself skewed by the GBP position, which in turn influences the EUR and GBP components of the inventory dynamics and hence the optimal EURUSD quotes.
 
@@ -226,9 +227,9 @@ The inset in Figure~\ref{fig:ode-hedging} shows the correlation matrix of the fi
 
 To verify that the optimal strategy produces sensible inventory dynamics, we simulate the dealer's inventory process under the computed strategy using a tau-leaping Monte Carlo method. The simulation models client arrivals as Poisson events (with fill probabilities determined by the optimal markups) and hedging as a continuous drift, discretized over short time steps.
 
-Figure~\ref{fig:ode-inventory} shows the resulting joint distribution of EUR and GBP inventories from a long simulation of the three-currency model (USD, EUR, GBP). The inventory distribution is approximately elliptical and concentrated around the origin, confirming that the strategy keeps the dealer's positions bounded. The contours of the risk function $\frac{\gamma}{2}\,y^\T\!\Sigma\,y$ are superimposed: the inventory distribution is clearly shaped by these risk contours, with the principal axis of the distribution aligned with the direction of minimum risk. This alignment arises because the dealer penalizes risk proportionally to $y^\T\!\Sigma\,y$ through the mean-variance term in the objective, and the optimal strategy acts to keep the inventory in the low-risk region.
+Figure~\ref{fig:ode-inventory} shows the resulting joint distribution of EUR and GBP inventories from a long simulation of the three-currency model (USD, EUR, GBP). The inventory distribution is approximately elliptical and concentrated around the origin, confirming that the strategy keeps the dealer's positions bounded. The dashed contours show levels of the portfolio risk $\frac{\gamma}{2}\,y^\T\!\Sigma\,y$. The inventory distribution follows the shape of these contours: it extends further in the direction where the risk is smallest. This is because the dealer's objective penalises portfolio risk, so the optimal strategy keeps inventories close to the low-risk region.
 
-The elongation of the distribution along the direction of positive EUR-GBP correlation reflects the fact that correlated positions partially offset each other in terms of portfolio risk. The dealer tolerates larger combined EUR-GBP positions when they are positively correlated (both long or both short) than when they are negatively correlated (long one, short the other), because the portfolio variance is lower in the former case.
+The distribution is elongated along the direction where the EUR and GBP inventories have opposite signs (long one, short the other). Because EUR and GBP exchange rates are positively correlated, such opposite positions partially offset each other, reducing the portfolio variance. The dealer therefore tolerates larger combined positions in this direction than along the diagonal where both inventories have the same sign.
 
 \begin{figure}[t]
   \centering

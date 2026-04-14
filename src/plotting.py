@@ -21,7 +21,8 @@ def plot_top_of_book_quotes_vs_inventory(res: MMResult,
                                          z_musd: float,
                                          inventory_ccy: str,
                                          inventory_grid_musd: np.ndarray,
-                                         pairs_to_plot: List[Tuple[str, str]]) -> None:
+                                         pairs_to_plot: List[Tuple[str, str]],
+                                         save_path: str | None = None) -> None:
     """Plot bid/ask quotes vs inventory for selected currency pairs."""
     mp = res.mp
 
@@ -33,24 +34,27 @@ def plot_top_of_book_quotes_vs_inventory(res: MMResult,
         for inv in inventory_grid_musd:
             y = _y_vector(mp, {inventory_ccy: inv})
 
+            # Quote relative to mid: bid = mid - δ_bid, ask = mid + δ_ask
             delta_bid = res.markup(tier_idx, ccy_pay=X, ccy_sell=Y, z_musd=z_musd, y=y)
-            delta_ask = -res.markup(tier_idx, ccy_pay=Y, ccy_sell=X, z_musd=z_musd, y=y)
+            delta_ask = res.markup(tier_idx, ccy_pay=Y, ccy_sell=X, z_musd=z_musd, y=y)
 
-            bid_bps.append(delta_bid / BP)
+            bid_bps.append(-delta_bid / BP)
             ask_bps.append(delta_ask / BP)
 
         bid_bps = np.array(bid_bps)
         ask_bps = np.array(ask_bps)
 
-        line, = plt.plot(inventory_grid_musd, bid_bps, label=f"{X}{Y} bid")
-        plt.plot(inventory_grid_musd, ask_bps, color=line.get_color(), label=f"{X}{Y} ask")
+        line, = plt.plot(inventory_grid_musd, ask_bps, label=f"{X}{Y} ask")
+        plt.plot(inventory_grid_musd, bid_bps, color=line.get_color(), linestyle="--", label=f"{X}{Y} bid")
 
     plt.axhline(0.0, linewidth=0.8)
     plt.xlabel(f"{inventory_ccy} Inventory (M$)")
-    plt.ylabel("Bid and Ask Quotes (bps)")
+    plt.ylabel("Quote relative to mid (bps)")
     plt.title("Approximate Optimal Top-of-Book Quotes")
     plt.legend(ncol=2)
     plt.grid(True, alpha=0.3)
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches="tight")
     plt.show()
 
 

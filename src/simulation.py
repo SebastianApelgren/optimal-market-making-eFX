@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 import numpy as np
+from tqdm.auto import tqdm
 
 from .model import ModelParams, canon_pair, DAY_SECONDS
 from .hamiltonian import logistic_f
@@ -52,7 +53,7 @@ def simulate_inventory_path_tau_leap(
 
     unordered_pairs = list(mp.pairs.keys())
 
-    for t in range(n_steps):
+    for t in tqdm(range(n_steps), desc="tau-leap", leave=False):
         y = Y[t].copy()
 
         for (a, b) in unordered_pairs:
