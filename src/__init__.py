@@ -21,6 +21,9 @@ from .simulation import (
 from .plotting import (
     plot_top_of_book_quotes_vs_inventory, plot_hedge_rates_vs_inventory,
 )
+from .sobol import (
+    saltelli_sample, evaluate_saltelli_samples, compute_sobol_indices,
+)
 from .pde import (
     validate_pde_grid,
     QuotingSpec,

@@ -150,7 +150,6 @@ desktop.ini
 *.parquet
 *.h5
 *.hdf5
-data/
 *.pkl
 *.pickle
 
