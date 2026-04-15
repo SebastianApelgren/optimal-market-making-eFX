@@ -165,8 +165,15 @@ cross_skew = (res.markup(0, "EUR","USD", 1.0, y_long_gbp)
 # 4. Own-pair hedge rate (EUR/USD, y_EUR=10)
 xi_own = res.hedge_rate("EUR", "USD", y_long_eur)
 
-# 5. Cross-pair hedge rate (EUR/GBP, y_EUR=10)
-xi_cross = res.hedge_rate("EUR", "GBP", y_long_eur)
+# 5. Cross-hedge momentum (EUR/GBP direction, y_EUR=10)
+# p = -(2*A0*y + B0) . d_{EUR/GBP}, where d = [0, +1, -1]
+ccy = mp.currencies
+i_eur, i_gbp = ccy.index("EUR"), ccy.index("GBP")
+d_eg = np.zeros(3)
+d_eg[i_eur] = 1.0
+d_eg[i_gbp] = -1.0
+AyB = 2.0 * res.A0 @ y_long_eur + res.B0
+p_cross = -(AyB @ d_eg)
 
 # 6. Net revenue at y_EUR=10
 R_long = _revenue_rate(mp, res, y_long_eur)

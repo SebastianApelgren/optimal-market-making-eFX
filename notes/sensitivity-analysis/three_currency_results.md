@@ -165,7 +165,7 @@ The own-pair hedge rate has CV = 111%, with a 90% CI spanning from -9,300 to 0 M
 
 ### 6. Most parameters can be safely fixed
 
-Of the 20 parameters, only 5-7 have nonzero S_Ti for any QoI: sigma_EUR, sigma_GBP, rho, gamma, lambda_scale from the global set, plus eta_EU and the EUR/USD demand parameters for pair-specific QoIs. All 10 GBP/USD and EUR/GBP pair-specific parameters have S_Ti approximately 0 across all QoIs (except minor contributions to net revenue). The 20-parameter model has effectively 7 active dimensions.
+Of the 20 parameters, only 10 have S_Ti > 0.01 for any QoI: the 5 global parameters (sigma_EUR, sigma_GBP, rho, gamma, lambda_scale), the 4 EUR/USD demand parameters (alpha_1, alpha_2, beta_1, beta_2), and eta_EU. The remaining 10 parameters (all GBP/USD and EUR/GBP pair-specific) have S_Ti < 0.025 across all QoIs, with the largest contributions appearing only in net revenue (where GBP/USD demand parameters reach S_Ti ~ 0.02). For the quoting and hedging QoIs, these 10 parameters can be fixed at nominal without loss.
 
 ### 7. Pair-specific demand parameters don't couple across pairs
 

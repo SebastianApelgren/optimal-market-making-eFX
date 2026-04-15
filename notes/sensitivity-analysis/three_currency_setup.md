@@ -29,7 +29,7 @@ We study 20 parameters: 5 global and 5 per pair. All are varied uniformly around
 | 1 | EUR volatility | sigma_EUR | 80 bps | [56, 104] | Uniform (+-30%) |
 | 2 | GBP volatility | sigma_GBP | 70 bps | [49, 91] | Uniform (+-30%) |
 | 3 | EUR/GBP correlation | rho | 0.6 | [0.3, 0.9] | Uniform (+-50%) |
-| 4 | Risk aversion | gamma | 20 | [10, 40] | Uniform (+-50%) |
+| 4 | Risk aversion | gamma | 20 | [10, 40] | Uniform |
 | 5 | Arrival rate scale | lambda_scale | 1.0 | [0.5, 1.5] | Uniform (+-50%) |
 
 ### EUR/USD pair parameters
@@ -40,7 +40,7 @@ We study 20 parameters: 5 global and 5 per pair. All are varied uniformly around
 | 7 | Logistic shift, tier 2 | alpha_2^{EU} | -0.3 | [-0.9, 0.3] | Uniform (+-100%) |
 | 8 | Logistic slope, tier 1 | beta_1^{EU} | 11.0 (1/bps) | [7.7, 14.3] | Uniform (+-30%) |
 | 9 | Logistic slope, tier 2 | beta_2^{EU} | 3.5 (1/bps) | [2.45, 4.55] | Uniform (+-30%) |
-| 10 | Execution cost | eta^{EU} | 1e-5 bps | [0.5e-5, 2e-5] | Uniform (+-50%) |
+| 10 | Execution cost | eta^{EU} | 1e-5 bps | [0.5e-5, 2e-5] | Uniform |
 
 ### GBP/USD pair parameters
 
@@ -50,7 +50,7 @@ We study 20 parameters: 5 global and 5 per pair. All are varied uniformly around
 | 12 | Logistic shift, tier 2 | alpha_2^{GU} | 0.0 | [-0.6, 0.6] | Uniform (+-0.6 abs) |
 | 13 | Logistic slope, tier 1 | beta_1^{GU} | 5.5 (1/bps) | [3.85, 7.15] | Uniform (+-30%) |
 | 14 | Logistic slope, tier 2 | beta_2^{GU} | 2.0 (1/bps) | [1.4, 2.6] | Uniform (+-30%) |
-| 15 | Execution cost | eta^{GU} | 1.5e-5 bps | [0.75e-5, 3e-5] | Uniform (+-50%) |
+| 15 | Execution cost | eta^{GU} | 1.5e-5 bps | [0.75e-5, 3e-5] | Uniform |
 
 ### EUR/GBP pair parameters
 
@@ -60,7 +60,7 @@ We study 20 parameters: 5 global and 5 per pair. All are varied uniformly around
 | 17 | Logistic shift, tier 2 | alpha_2^{EG} | 0.5 | [-0.1, 1.1] | Uniform (+-~120%) |
 | 18 | Logistic slope, tier 1 | beta_1^{EG} | 3.5 (1/bps) | [2.45, 4.55] | Uniform (+-30%) |
 | 19 | Logistic slope, tier 2 | beta_2^{EG} | 2.5 (1/bps) | [1.75, 3.25] | Uniform (+-30%) |
-| 20 | Execution cost | eta^{EG} | 3e-5 bps | [1.5e-5, 6e-5] | Uniform (+-50%) |
+| 20 | Execution cost | eta^{EG} | 3e-5 bps | [1.5e-5, 6e-5] | Uniform |
 
 ### Rationale for parameter selection
 
