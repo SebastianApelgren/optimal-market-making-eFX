@@ -155,15 +155,19 @@ How aggressively the model hedges EUR exposure through the EUR/USD interbank mar
 
 In 3 currencies, the model has the option to hedge EUR through EUR/GBP as well. If cross-hedging is significant, the own-pair hedge rate might be smaller (some load shifted to the cross pair). Whether the Sobol ranking changes compared to 2 currencies is an empirical question.
 
-**QoI 5: Cross-pair hedge rate** [M$/day]
+**QoI 5: Cross-hedge momentum** [decimal]
 
-xi_star(EUR/GBP) at y = [0, 10, 0].
+p_{EUR/GBP} = -(2*A_0*y + B_0) . d_{EUR/GBP} at y = [0, 10, 0].
 
-How much EUR exposure is hedged through the cross pair EUR/GBP. This QoI cannot exist in 2 currencies.
+The value function gradient projected onto the EUR/GBP hedging direction. This is the "desire to cross-hedge" — the momentum that would drive cross-pair hedging if execution costs were zero. It measures the strength of the cross-hedging incentive from the value function, independent of whether the dead zone and execution cost make it economical.
 
-The hedge rate formula gives p = -(2*A_0*y)*d_{EUR/GBP} (ignoring small k terms), where d_{EUR/GBP} has components in the EUR and GBP directions. With y = [0, 10, 0], this depends on A_0[EUR,EUR] and A_0[EUR,GBP]. The hedge rate is then modulated by eta^{EG} (which is 3x higher than eta^{EU}, making cross-hedging more expensive).
+We use the momentum rather than the clipped hedge rate xi_star(EUR/GBP) because the EUR/GBP dead zone (psi_EG = 0.25 bps) is wide enough that xi_star is zero for ~99.7% of the parameter samples. The clipped rate has essentially no variance to decompose, making Sobol indices meaningless. The momentum is continuous and well-behaved.
 
-Practical meaning: "When I'm long EUR, how much should I hedge through the less-liquid cross pair?" Its magnitude tells us whether cross-hedging is economically relevant. Its Sobol indices tell us what drives it.
+The momentum depends on A_0[EUR,EUR] and A_0[EUR,GBP], which encode the cross-pair risk coupling. With y = [0, 10, 0] and d_{EUR/GBP} = [0, +1, -1]:
+
+p = -20 * (A_0[EUR,EUR] - A_0[GBP,EUR])
+
+Practical meaning: "How strongly does the value function push toward hedging EUR through the cross pair?" Its Sobol indices show what drives the cross-hedging incentive. The fact that the actual hedge rate is zero (blocked by the dead zone) is itself a finding about the EUR/GBP execution parameters.
 
 **QoI 6: Net revenue** [$/day]
 
@@ -177,7 +181,7 @@ This is the aggregated "bottom line under inventory stress." It integrates quoti
 
 **Included:**
 - QoIs 1, 2, 4 are identical to 2-currency QoIs 1, 2, 3. Side-by-side comparison shows whether the sensitivity structure changes when cross-currency effects are present.
-- QoIs 3, 5 probe the two genuinely new mechanisms (cross-inventory influence on quoting, cross-hedging). Neither can exist in 2 currencies.
+- QoIs 3, 5 probe the two genuinely new mechanisms (cross-inventory influence on quoting, cross-hedging incentive). Neither can exist in 2 currencies.
 - QoI 6 is the aggregated economic outcome, the most downstream KPI.
 
 **Considered and excluded:**
@@ -210,7 +214,7 @@ The only change is the increased parameter dimension (k=20 vs k=8), which increa
 
 - **QoI 4 (own-pair hedge rate)**: Similar to 2-currency results (sigma, gamma, lambda, eta^EU), possibly with reduced magnitude if some hedging load shifts to the cross pair.
 
-- **QoI 5 (cross-pair hedge rate)**: Expected drivers: rho, eta^EG, sigma_EUR, sigma_GBP, gamma. Likely exhibits the same 1/eta amplification seen in 2-currency QoI 3, now for eta^EG. Forward UQ may show high variance.
+- **QoI 5 (cross-hedge momentum)**: Expected drivers: sigma_EUR, rho, gamma, lambda_scale, sigma_GBP. Since this is the raw momentum (not clipped by the dead zone or divided by eta), it should be continuous and well-behaved for Sobol analysis.
 
 - **QoI 6 (net revenue)**: Integrates many effects. Lambda_scale likely dominates (it scales all revenue). The decomposition of sensitivity across the remaining parameters is the unknown.
 
@@ -220,7 +224,7 @@ The only change is the increased parameter dimension (k=20 vs k=8), which increa
 
 2. **Do demand parameters of one pair affect the strategy for another pair?** The M_big matrix in the Riccati ODE aggregates Hamiltonian coefficients from all pairs. EUR/GBP's alpha and beta contribute to M, which affects A, which affects EUR/USD quoting. Is this coupling negligible or significant?
 
-3. **Is cross-hedging economically significant?** The magnitude of QoI 5 tells us this directly. If xi_star(EUR/GBP) is small compared to xi_star(EUR/USD), cross-hedging is a minor correction. If it is large, the multi-pair hedging structure matters.
+3. **Is cross-hedging economically significant?** QoI 5 measures the cross-hedging incentive from the value function. If the momentum is small, cross-hedging is a minor correction. If it is large but blocked by the dead zone, that tells us the value function wants to cross-hedge but execution costs prevent it.
 
 4. **Are the 2-currency sensitivity rankings robust?** Comparing QoIs 1, 2, 4 with their 2-currency counterparts shows whether the main conclusions ("spreads depend on demand curves, inventory management depends on market conditions, hedging depends on everything") survive the addition of cross-currency effects.
 
@@ -228,9 +232,12 @@ The only change is the increased parameter dimension (k=20 vs k=8), which increa
 
 ## Connection to the thesis
 
-The 3-currency sensitivity analysis extends the 2-currency results in a way that is self-contained and does not rely on them:
+The sensitivity chapter presents the 3-currency analysis as the main (and only) sensitivity study. The 2-currency analysis was development work that established the methodology; it remains in the repo as `sensitivity_analysis_2ccy.ipynb` but does not appear in the report.
 
-- **2-currency chapter**: establishes the methodology and identifies which *types* of parameters matter for which *types* of decisions, in the simplest case.
-- **3-currency section**: extends the analysis to a multi-pair setting where cross-currency effects exist, includes all parameters without pre-filtering, and tests whether the 2-currency conclusions generalize.
+The chapter should cover:
+1. Setup: parameters, QoIs, methodology (Sobol + forward UQ)
+2. Results: Sobol indices per QoI, with interpretation
+3. Forward UQ: output distributions, robustness assessment
+4. Discussion: what the results mean for model calibration and deployment
 
-The two analyses together tell a stronger story than either alone. If the rankings are consistent, it builds confidence that the sensitivity structure is intrinsic to the model, not an artifact of the 2-currency simplification. If they differ, the differences reveal the impact of cross-currency coupling and identify which parameters become important in the multi-currency setting.
+The notebook is `sensitivity_analysis.ipynb`. Saved data is in `data/sensitivity_analysis/`. Figures are saved to `report/figures/fig_sa_sobol.pdf` and `report/figures/fig_sa_forward_uq.pdf`.
