@@ -171,3 +171,20 @@ logs/
 temp/
 tmp/
 TEMP.md
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.bbl-SAVE-ERROR
+*.bcf
+*.bcf-SAVE-ERROR
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.run.xml
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+report/main.pdf
