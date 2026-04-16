@@ -170,3 +170,4 @@ logs/
 *.temp
 temp/
 tmp/
+TEMP.md
