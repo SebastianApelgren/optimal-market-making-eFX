@@ -7,6 +7,9 @@ and do not depend on any model-specific code.
 
 from __future__ import annotations
 
+import os
+from multiprocessing import Pool
+
 import numpy as np
 from tqdm import tqdm
 
@@ -21,8 +24,25 @@ def saltelli_sample(N, ranges, seed=42):
     return A, B
 
 
-def evaluate_saltelli_samples(model_func, A, B):
+def _init_worker():
+    """Initializer for pool workers: limit BLAS threads to avoid contention."""
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
+
+def evaluate_saltelli_samples(model_func, A, B, n_workers=1):
     """Evaluate model at all Saltelli sample points.
+
+    Parameters
+    ----------
+    model_func : callable
+        Must be importable from a module (not defined in __main__) when
+        n_workers > 1, because macOS uses spawn for multiprocessing.
+    A, B : ndarray, shape (N, k)
+        Saltelli sample matrices.
+    n_workers : int
+        Number of parallel workers. 1 = sequential (original behavior).
 
     Returns f_A (N, n_qoi), f_B (N, n_qoi), f_C (k, N, n_qoi).
     """
@@ -40,10 +60,19 @@ def evaluate_saltelli_samples(model_func, A, B):
 
     # Evaluate all samples
     n_qoi = len(model_func(A[0]))
-    results = np.empty((total, n_qoi))
 
-    for j in tqdm(range(total), desc="Saltelli evaluations", mininterval=2.0):
-        results[j] = model_func(all_params[j])
+    if n_workers > 1:
+        chunksize = max(1, total // (n_workers * 4))
+        with Pool(processes=n_workers, initializer=_init_worker) as pool:
+            results_list = list(tqdm(
+                pool.imap(model_func, all_params, chunksize=chunksize),
+                total=total, desc="Saltelli evaluations", mininterval=2.0,
+            ))
+        results = np.array(results_list)
+    else:
+        results = np.empty((total, n_qoi))
+        for j in tqdm(range(total), desc="Saltelli evaluations", mininterval=2.0):
+            results[j] = model_func(all_params[j])
 
     # Unpack
     f_A = results[:N]

@@ -24,6 +24,9 @@ from .plotting import (
 from .sobol import (
     saltelli_sample, evaluate_saltelli_samples, compute_sobol_indices,
 )
+from .sensitivity import (
+    build_modified_params, evaluate_qois,
+)
 from .pde import (
     validate_pde_grid,
     QuotingSpec,

@@ -1,276 +1,417 @@
 \chapter{Sensitivity Analysis and Uncertainty Quantification}
 \label{ch:sensitivity}
 
-The ODE approximation developed in Chapter~\ref{ch:ode} provides an efficient way to compute the optimal market making strategy for a given set of model parameters. In practice, however, these parameters are not known exactly. Exchange rate volatilities fluctuate from day to day, client arrival rates depend on market conditions, the logistic demand parameters are fitted from historical fill data via regression and carry estimation error, and the execution cost coefficients are inherently difficult to calibrate. Meanwhile, the risk aversion parameter $\gamma$ is a subjective design choice with no single correct value. A natural question is therefore: how sensitive is the optimal strategy to changes in these parameters, and how does parameter uncertainty propagate to the quantities that a market maker cares about?
+The ODE approximation developed in Chapter~\ref{ch:ode} computes the optimal market making strategy for a given set of model parameters in milliseconds. In practice, however, these parameters are not known exactly. Exchange rate volatilities fluctuate from day to day. Client arrival rates depend on market conditions. The logistic demand parameters $(\alpha_n, \beta_n)$ are fitted from historical fill-or-reject data via logistic regression and carry estimation error. The quadratic execution cost~$\eta$, which governs market impact in the hedging channel, is difficult to calibrate. The cross-pair correlation~$\rho$ is estimated from return data and varies across market regimes. Even the risk aversion~$\gamma$, which is a design choice rather than a market observable, is typically tuned rather than derived from first principles. A natural question is therefore: how sensitive is the optimal strategy to changes in these parameters, and how does parameter uncertainty propagate to the quantities that a market maker cares about?
 
-In this chapter, we address these questions through a systematic sensitivity analysis and forward uncertainty quantification study. We use variance-based global sensitivity analysis, specifically Sobol indices \cite{sobol2001}, to decompose the output variance into contributions from individual parameters and their interactions. We then propagate the full parameter uncertainty forward through the model to obtain the probability distributions of the key strategy outputs. Together, these two analyses identify which parameters most strongly influence the optimal strategy, which can be safely fixed at nominal values, and how robust the model's prescriptions are under realistic parameter uncertainty.
+We address this question through two complementary analyses. First, we use variance-based global sensitivity analysis \cite{sobol2001, saltelli2008} to decompose the output variance of each quantity of interest into contributions from individual parameters and their interactions. The resulting Sobol indices identify which parameters drive the uncertainty in each output and, equally important, which parameters can be safely fixed at nominal values. Second, we propagate the full parameter uncertainty forward through the model to obtain the probability distributions of the key strategy outputs, characterizing their spread and shape under realistic parameter ranges.
 
-We work with the two-currency case (USD, EUR), which is the simplest non-trivial setting with one currency pair. This keeps the parameter count manageable at eight, the results easy to visualize, and the setup directly compatible with the two-dimensional PDE solver developed in Chapter~\ref{ch:pde}, which will later serve as an independent validation of the ODE-based conclusions. Extension to three or more currencies would introduce additional sensitivity dimensions, notably cross-pair correlations, that do not arise in the two-currency case; this is discussed briefly in Chapter~\ref{ch:conclusion}.
+We work with three currencies (USD, EUR, GBP), the smallest setting that includes cross-pair correlations, cross-inventory effects on quoting, and cross-hedging. These are the multi-currency features that are central to the model of~\cite{barzykin2023} and that were demonstrated in Chapter~\ref{ch:ode}: the EURUSD markup shifts with GBP inventory (Figure~\ref{fig:ode-quotes}), the dealer hedges EUR exposure through multiple pairs (Figure~\ref{fig:ode-hedging}), and the inventory distribution is shaped by the full covariance structure (Figure~\ref{fig:ode-inventory}). A two-currency analysis would miss all of these effects. With three currencies and three tradeable pairs, the model has 20 uncertain parameters and we define six quantities of interest that probe both the quoting policy and the hedging and economic outcomes.
+
+The chapter is organized as follows. Section~\ref{sec:sa-setup} defines the parameters under study and the quantities of interest. Section~\ref{sec:sa-methodology} describes the Sobol index framework and the forward uncertainty quantification procedure. Sections~\ref{sec:sa-results-a} and~\ref{sec:sa-results-b} present the results for the quoting policy and the hedging and economic quantities, respectively. Section~\ref{sec:sa-discussion} discusses the overall sensitivity structure, identifies parameters that can be fixed, and assesses the robustness of the optimal strategy.
 
 
+% ==================================================================
 \section{Setup}
 \label{sec:sa-setup}
 
+% ------------------------------------------------------------------
 \subsection{Parameters under study}
+\label{sec:sa-params}
 
-We study eight parameters of the two-currency (USD, EUR) model, using the values from Table~1 of \cite{barzykin2023} as the nominal baseline. Table~\ref{tab:sa-params} lists the parameters, their nominal values, and the ranges over which they are varied. All parameters are sampled from independent uniform distributions on their respective ranges.
+We study 20 parameters of the three-currency model: 5 global parameters that affect all pairs, and 5 pair-specific parameters for each of the three pairs (EURUSD, GBPUSD, EURGBP). Table~\ref{tab:sa-params} lists the parameters with their nominal values from Table~1 of~\cite{barzykin2023} and the ranges over which they are varied. All parameters are sampled from independent uniform distributions on their respective ranges.
 
 \begin{table}[ht]
 \centering
-\caption{Parameters varied in the sensitivity analysis. Nominal values correspond to the EUR/USD pair from Table~1 of \cite{barzykin2023}. Ranges are chosen to reflect realistic uncertainty around the nominal.}
+\caption{Parameters varied in the sensitivity analysis. Nominal values from Table~1 of~\cite{barzykin2023}. Ranges reflect realistic uncertainty around the nominal, chosen as $\pm 30$--$50\%$ for most parameters.}
 \label{tab:sa-params}
-\begin{tabular}{@{}llcc@{}}
+\begin{tabular}{@{}clccc@{}}
 \toprule
-Parameter & Symbol & Nominal & Range \\
+\# & Parameter & Symbol & Nominal & Range \\
 \midrule
-EUR volatility & $\sigma_{\text{EUR}}$ & 80\,bps & $[56, 104]$\,bps \\
-Risk aversion & $\gamma$ & 20 & $[10, 40]$ \\
-Arrival rate scale & $\lambda_{\text{scale}}$ & 1.0 & $[0.5, 1.5]$ \\
-Logistic shift (tier 1) & $\alpha_1$ & $-1.9$ & $[-2.5, -1.3]$ \\
-Logistic shift (tier 2) & $\alpha_2$ & $-0.3$ & $[-0.9, 0.3]$ \\
-Logistic slope (tier 1) & $\beta_1$ & $11 \times 10^4$ & $[7.7, 14.3] \times 10^4$ \\
-Logistic slope (tier 2) & $\beta_2$ & $3.5 \times 10^4$ & $[2.45, 4.55] \times 10^4$ \\
-Execution cost (quadratic) & $\eta$ & $10^{-5}$\,bps & $[0.5, 2.0] \times 10^{-5}$\,bps \\
+\multicolumn{5}{@{}l}{\textit{Global}} \\
+1 & EUR volatility & $\sigma_{\text{EUR}}$ & 80\,bps & $[56,\; 104]$\,bps \\
+2 & GBP volatility & $\sigma_{\text{GBP}}$ & 70\,bps & $[49,\; 91]$\,bps \\
+3 & EUR/GBP correlation & $\rho$ & 0.6 & $[0.3,\; 0.9]$ \\
+4 & Risk aversion & $\gamma$ & 20 & $[10,\; 40]$ \\
+5 & Arrival rate scale & $\lambda_{\text{scale}}$ & 1.0 & $[0.5,\; 1.5]$ \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{EUR/USD}} \\
+6 & Logistic shift, tier 1 & $\alpha_1^{\text{EU}}$ & $-1.9$ & $[-2.5,\; -1.3]$ \\
+7 & Logistic shift, tier 2 & $\alpha_2^{\text{EU}}$ & $-0.3$ & $[-0.9,\; 0.3]$ \\
+8 & Logistic slope, tier 1 & $\beta_1^{\text{EU}}$ & $11.0$\,bps$^{-1}$ & $[7.7,\; 14.3]$ \\
+9 & Logistic slope, tier 2 & $\beta_2^{\text{EU}}$ & $3.5$\,bps$^{-1}$ & $[2.45,\; 4.55]$ \\
+10 & Execution cost & $\eta^{\text{EU}}$ & $10^{-5}$\,bps & $[0.5,\; 2.0] \times 10^{-5}$ \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{GBP/USD}} \\
+11 & Logistic shift, tier 1 & $\alpha_1^{\text{GU}}$ & $-1.4$ & $[-2.0,\; -0.8]$ \\
+12 & Logistic shift, tier 2 & $\alpha_2^{\text{GU}}$ & $0.0$ & $[-0.6,\; 0.6]$ \\
+13 & Logistic slope, tier 1 & $\beta_1^{\text{GU}}$ & $5.5$\,bps$^{-1}$ & $[3.85,\; 7.15]$ \\
+14 & Logistic slope, tier 2 & $\beta_2^{\text{GU}}$ & $2.0$\,bps$^{-1}$ & $[1.4,\; 2.6]$ \\
+15 & Execution cost & $\eta^{\text{GU}}$ & $1.5 \times 10^{-5}$\,bps & $[0.75,\; 3.0] \times 10^{-5}$ \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{EUR/GBP}} \\
+16 & Logistic shift, tier 1 & $\alpha_1^{\text{EG}}$ & $-0.5$ & $[-1.1,\; 0.1]$ \\
+17 & Logistic shift, tier 2 & $\alpha_2^{\text{EG}}$ & $0.5$ & $[-0.1,\; 1.1]$ \\
+18 & Logistic slope, tier 1 & $\beta_1^{\text{EG}}$ & $3.5$\,bps$^{-1}$ & $[2.45,\; 4.55]$ \\
+19 & Logistic slope, tier 2 & $\beta_2^{\text{EG}}$ & $2.5$\,bps$^{-1}$ & $[1.75,\; 3.25]$ \\
+20 & Execution cost & $\eta^{\text{EG}}$ & $3 \times 10^{-5}$\,bps & $[1.5,\; 6.0] \times 10^{-5}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The rationale for these choices is as follows. The volatility $\sigma_{\text{EUR}}$, arrival rate scale $\lambda_{\text{scale}}$, and demand curve parameters $(\alpha_n, \beta_n)$ are all estimated from market data and carry genuine estimation uncertainty. Volatility varies from day to day; arrival rates depend on market conditions; and the logistic parameters are fitted from historical fill-or-reject data via logistic regression and are never known exactly. The risk aversion $\gamma$ is a design choice by the trading desk, but since it is typically tuned rather than derived from first principles, treating it as uncertain captures the sensitivity of the strategy to this subjective choice. The quadratic execution cost $\eta$, which governs market impact in the hedging channel, is notoriously difficult to estimate in practice.
+The volatilities~$\sigma$ and arrival rate scale~$\lambda_{\text{scale}}$ are estimated from market data and fluctuate with market conditions. The logistic demand parameters $(\alpha_n, \beta_n)$ are fitted from historical fill-or-reject data for each client tier on each pair and carry estimation error. The risk aversion~$\gamma$ is a design choice but is tuned in practice, so treating it as uncertain captures the sensitivity of the strategy to this subjective input. The execution cost~$\eta$ governs market impact in the hedging channel and is hard to estimate precisely. The correlation~$\rho$ between EUR and GBP exchange rates is estimated from return data and varies across market regimes; it controls the strength of cross-pair coupling through the covariance matrix~$\Sigma$.
 
-The arrival rates for the five trade sizes ($z \in \{1, 5, 10, 20, 50\}$\,M\$) are not varied independently but are scaled by a single multiplier $\lambda_{\text{scale}}$. This reflects the realistic scenario that overall market activity rises or falls broadly, rather than that small trades become more frequent while large trades become less frequent. In contrast, the logistic parameters $(\alpha_n, \beta_n)$ are varied independently for each tier, since the two tiers represent fundamentally different client segments with separate calibrations.
+The arrival rates for the five trade sizes are not varied independently but are scaled by a single shared multiplier~$\lambda_{\text{scale}}$ applied uniformly across all three pairs. This reflects the realistic scenario that overall market activity rises or falls broadly. The demand curve and execution cost parameters, by contrast, are varied independently per pair, since each pair has a distinct client base and liquidity profile.
 
-Several parameters are held fixed at their nominal values: the linear execution cost $\psi$ (set by the execution desk, relatively well known, and enters the model only through a simple thresholding effect on the hedge rate), the terminal penalty $\kappa$ (set to zero in the paper's example), the time horizon $T = 0.05$\,days (a design parameter, not uncertain in the same sense), the drift $\mu$ (zero in the paper's example), and the exogenous trade rates $k_i$ (negligibly small in the paper's calibration). These parameters are expected to have at most a local and easily understood effect on the strategy, and excluding them keeps the sensitivity analysis focused.
+Several parameters are held fixed at their nominal values: the linear execution cost~$\psi$ (set by the execution desk and relatively well known), the terminal penalty~$\kappa$ (set to zero in the paper's example), the time horizon $T = 0.05$\,days, the drift~$\mu$ (zero in the paper's example), and the exogenous trade rates~$k_i$ (negligibly small). These parameters are expected to have at most a local effect on the strategy, and excluding them keeps the analysis focused on the 20 inputs with genuine uncertainty or design freedom.
 
 
+% ------------------------------------------------------------------
 \subsection{Quantities of interest}
 \label{sec:sa-qois}
 
-For each parameter sample, we solve the Riccati ODE system (see Chapter~\ref{ch:ode}) and extract three scalar quantities of interest (QoIs) that probe different aspects of the optimal strategy:
+For each parameter sample, we solve the Riccati ODE system of Chapter~\ref{ch:ode} and extract six scalar quantities of interest (QoIs). All six are deterministic given the ODE solution and introduce no sampling noise. We organize them into two groups: Set~A probes the quoting policy, the quantities that determine what the client sees; Set~B probes hedging and economic outcomes, the quantities that the trading desk manages.
+
+The QoIs are evaluated at three inventory states, each a single-currency perturbation from flat:
+\[
+  y_{\text{flat}} = (0, 0, 0), \qquad y_{\text{long EUR}} = (0, 10, 0)\;\text{M\$}, \qquad y_{\text{long GBP}} = (0, 0, 10)\;\text{M\$}.
+\]
+Using single-currency perturbations isolates the own-inventory and cross-inventory mechanisms cleanly.
+
+\paragraph{Set A: quoting policy.}
 
 \begin{enumerate}
-  \item \textbf{Neutral spread} $\delta^*(y = 0)$: the optimal markup at zero inventory for tier~1 at trade size $z = 1$\,M\$. This is the base bid-ask spread that the market maker quotes when carrying no inventory risk. It determines the per-trade profitability under normal conditions.
+  \item \textbf{Tier spread differential} (bps). The difference in optimal markups between tier~1 (aggressive) and tier~2 (passive) on EURUSD at flat inventory, for trade size $z = 1$\,M\$:
+  \[
+    \text{QoI}_1 = \delta^*(y_{\text{flat}},\; \text{tier 1}) - \delta^*(y_{\text{flat}},\; \text{tier 2}).
+  \]
+  This measures the basis of client-tiered pricing: how much wider the model quotes for passive clients. Since tier~2 has a less price-sensitive demand curve, the tier~2 markup exceeds the tier~1 markup, making this quantity negative.
 
-  \item \textbf{Inventory skew} $\delta^*(y = 10) - \delta^*(y = 0)$: the change in the optimal markup when the market maker holds 10\,M\$ in EUR, relative to the flat-inventory case. This measures the strategy's responsiveness to inventory risk. Parameters that affect the curvature of the value function, such as $\gamma$ and $\sigma$, are expected to dominate here.
+  \item \textbf{Own-inventory skew} (bps). The change in the tier~1 EURUSD markup when the dealer holds 10\,M\$ in EUR:
+  \[
+    \text{QoI}_2 = \delta^*(y_{\text{long EUR}},\; \text{tier 1}) - \delta^*(y_{\text{flat}},\; \text{tier 1}).
+  \]
+  This measures the strategy's responsiveness to own-pair inventory risk, the skewing behavior visible in the EURUSD panel of Figure~\ref{fig:ode-quotes}.
 
-  \item \textbf{Hedge rate} $\xi^*(y = 10)$: the optimal hedging rate when holding 10\,M\$ in EUR. This measures how aggressively the model hedges residual inventory through the dealer-to-dealer market. It depends directly on the execution cost $\eta$ and on the value function gradient, which is influenced by all parameters that affect inventory risk.
+  \item \textbf{Cross-inventory skew} (bps). The change in the tier~1 EURUSD markup when the dealer holds 10\,M\$ in GBP instead:
+  \[
+    \text{QoI}_3 = \delta^*(y_{\text{long GBP}},\; \text{tier 1}) - \delta^*(y_{\text{flat}},\; \text{tier 1}).
+  \]
+  This quantity is structurally zero in a two-currency model where GBP does not exist. It measures the cross-currency influence demonstrated in Figure~\ref{fig:ode-quotes}, where EURUSD quotes shift with GBP inventory through the off-diagonal entries of the Riccati matrix~$A$.
 \end{enumerate}
 
-These three QoIs are deterministic given the ODE solution --- they require no Monte Carlo simulation and therefore introduce no sampling noise into the sensitivity analysis. They probe complementary aspects of the strategy: quoting behavior (QoIs~1--2) versus hedging behavior (QoI~3), and the flat-inventory regime (QoI~1) versus the regime under inventory pressure (QoIs~2--3). A key question is whether these different aspects are sensitive to the same or different parameters.
+\paragraph{Set B: hedging and economics.}
+
+\begin{enumerate}
+  \setcounter{enumi}{3}
+  \item \textbf{Own-pair hedge rate} (M\$/day). The optimal EURUSD hedge rate when holding 10\,M\$ in EUR:
+  \[
+    \text{QoI}_4 = \xi^*_{\text{EURUSD}}(y_{\text{long EUR}}).
+  \]
+  This measures how aggressively the model externalizes EUR inventory risk through the dealer-to-dealer market, the hedging channel analyzed in Figure~\ref{fig:ode-hedging}.
+
+  \item \textbf{Cross-hedge momentum} (decimal). The value function gradient projected onto the EURGBP hedging direction at the long-EUR inventory:
+  \[
+    \text{QoI}_5 = p_{\text{EURGBP}} = -(2A(0)\,y_{\text{long EUR}} + B(0))^\T d_{\text{EUR,GBP}}.
+  \]
+  This is the ``desire to cross-hedge'': the momentum that would drive EURGBP hedging if execution costs were zero. We use the raw momentum rather than the clipped hedge rate $\xi^*_{\text{EURGBP}}$ because the EURGBP dead zone ($\psi_{\text{EG}} = 0.25$\,bps) exceeds the typical momentum magnitude for nearly all parameter samples, leaving the actual hedge rate at zero with insufficient variance for meaningful Sobol decomposition. The momentum is continuous, well-behaved, and reveals the sensitivity structure of the cross-hedging incentive.
+
+  \item \textbf{Net revenue} (\$/day). Total expected revenue from quoting across all three pairs minus total hedging cost, at the long-EUR inventory:
+  \[
+    \text{QoI}_6 = R(y_{\text{long EUR}}) - L_{\text{total}}(y_{\text{long EUR}}),
+  \]
+  where $R = \sum_{\text{pairs, directions, tiers, sizes}} \lambda_k\,f(\delta^*)\,\delta^*\,z_k$ is the instantaneous revenue rate and $L_{\text{total}} = \sum_{\text{pairs}} (\psi\,|\xi^*| + \eta\,(\xi^*)^2)$ is the total hedging cost. This is the bottom line under inventory pressure: ``given that the desk is carrying EUR inventory, is it making money after hedging costs?''
+\end{enumerate}
+
+QoIs~1, 2, and 4 have direct analogues in a two-currency setting. QoIs~3 and 5 probe mechanisms that exist only with three or more currencies. QoI~6 integrates across all pairs. This mix allows us to ask both whether the sensitivity conclusions from a single-pair analysis survive in the multi-currency model and what new dimensions the cross-currency coupling introduces.
 
 
+% ==================================================================
 \section{Methodology}
 \label{sec:sa-methodology}
 
+% ------------------------------------------------------------------
 \subsection{Sobol indices}
+\label{sec:sa-sobol-method}
 
-We use variance-based global sensitivity analysis to quantify how much of the output variance in each QoI is attributable to each input parameter. The framework, introduced by Sobol \cite{sobol2001} and developed in detail by Saltelli et al.\ \cite{saltelli2008}, decomposes the variance of a model output $Y = g(X_1, \ldots, X_k)$ into contributions from individual inputs and their interactions.
+We use variance-based global sensitivity analysis to quantify how much of the output variance in each QoI is attributable to each input parameter. The framework, introduced by Sobol~\cite{sobol2001} and developed by Saltelli et al.~\cite{saltelli2008}, decomposes the variance of a model output $Y = g(X_1, \ldots, X_k)$ into contributions from individual inputs and their interactions.
 
-The \emph{first-order Sobol index} $S_i$ measures the fraction of the total output variance that is due to parameter $X_i$ alone, averaging over all other parameters:
+The \emph{first-order Sobol index} $S_i$ measures the fraction of the total output variance explained by parameter~$X_i$ alone, averaging over all other parameters:
 \begin{equation}
-\label{eq:sobol-first}
-S_i = \frac{\operatorname{Var}_{X_i}\!\bigl(\E_{X_{\sim i}}[Y \mid X_i]\bigr)}{\operatorname{Var}(Y)},
+  \label{eq:sobol-first}
+  S_i = \frac{\operatorname{Var}_{X_i}\!\bigl(\E_{X_{\sim i}}[Y \mid X_i]\bigr)}{\operatorname{Var}(Y)},
 \end{equation}
-where $X_{\sim i}$ denotes the vector of all parameters except $X_i$. If $S_i$ is large, the parameter $X_i$ has a strong individual effect on the output.
-
-The \emph{total-effect index} $S_{T_i}$ captures all contributions to the output variance that involve parameter $X_i$, whether individually or through interactions with other parameters:
+where $X_{\sim i}$ denotes all parameters except~$X_i$. The \emph{total-effect index} $S_{T_i}$ captures all contributions involving~$X_i$, whether individually or through interactions:
 \begin{equation}
-\label{eq:sobol-total}
-S_{T_i} = 1 - \frac{\operatorname{Var}_{X_{\sim i}}\!\bigl(\E_{X_i}[Y \mid X_{\sim i}]\bigr)}{\operatorname{Var}(Y)}.
+  \label{eq:sobol-total}
+  S_{T_i} = 1 - \frac{\operatorname{Var}_{X_{\sim i}}\!\bigl(\E_{X_i}[Y \mid X_{\sim i}]\bigr)}{\operatorname{Var}(Y)}.
 \end{equation}
-If $S_{T_i} \approx 0$, the parameter $X_i$ has no effect on the output, neither individually nor through interactions, and can be safely fixed at any value within its range. If $S_{T_i} \gg S_i$, the parameter participates in important interactions.
+If $S_{T_i} \approx 0$, the parameter has no effect on the output and can be safely fixed at any value within its range. If $S_{T_i} \gg S_i$, the parameter participates in important interactions with other parameters. When the model is perfectly additive (no interactions), the first-order indices sum to one. Interactions cause $\sum_i S_i < 1$ and $\sum_i S_{T_i} > 1$, since the shared variance is counted once per participating parameter in the total-effect indices.
 
-For a model that is perfectly additive (no interactions), the first-order indices sum to one: $\sum_i S_i = 1$. When interactions are present, $\sum_i S_i < 1$ and $\sum_i S_{T_i} > 1$, since the interaction contributions are counted once per participating parameter in the total-effect indices.
-
-
-\subsection{Estimation procedure}
-
-We estimate the Sobol indices using the Monte Carlo procedure of Saltelli et al.\ \cite{saltelli2010}, with the total-effect estimator of Jansen \cite{jansen1999}. The algorithm proceeds as follows.
-
+We estimate the indices using the Monte Carlo procedure of Saltelli et al.~\cite{saltelli2010}, with the total-effect estimator of Jansen~\cite{jansen1999}. The algorithm proceeds as follows.
 \begin{enumerate}
-  \item Draw two independent sample matrices $\mathbf{A}$ and $\mathbf{B}$ of shape $(N, k)$, where $N$ is the number of base samples and $k = 8$ is the number of parameters. Each row is drawn uniformly from the parameter ranges in Table~\ref{tab:sa-params}.
-
-  \item For each parameter $i = 1, \ldots, k$, construct the matrix $\mathbf{C}_i$ by taking $\mathbf{A}$ and replacing its $i$-th column with the corresponding column from $\mathbf{B}$.
-
-  \item Evaluate the model at all $N(k + 2)$ sample points: the $N$ rows of $\mathbf{A}$, the $N$ rows of $\mathbf{B}$, and the $N$ rows of each $\mathbf{C}_i$.
-
-  \item Compute the first-order and total-effect indices from the sample covariances:
+  \item Draw two independent sample matrices $\mathbf{A}$ and $\mathbf{B}$ of shape $(N, k)$, where $N$ is the number of base samples and $k = 20$. Each row is drawn uniformly from the parameter ranges in Table~\ref{tab:sa-params}.
+  \item For each parameter $i = 1, \ldots, k$, construct $\mathbf{C}_i$ by taking $\mathbf{A}$ and replacing its $i$-th column with the corresponding column from~$\mathbf{B}$.
+  \item Evaluate the model at all $N(k+2)$ sample points: $N$~rows of~$\mathbf{A}$, $N$~rows of~$\mathbf{B}$, and $N$~rows of each~$\mathbf{C}_i$.
+  \item Compute the indices from the sample covariances:
   \begin{align}
-  \label{eq:sobol-estimators}
-  S_i &= \frac{\frac{1}{N} \sum_{j=1}^{N} g(\mathbf{B}_j)\bigl(g(\mathbf{C}_i^{(j)}) - g(\mathbf{A}_j)\bigr)}{\widehat{\operatorname{Var}}(Y)}, \\[4pt]
-  S_{T_i} &= \frac{\frac{1}{2N} \sum_{j=1}^{N} \bigl(g(\mathbf{A}_j) - g(\mathbf{C}_i^{(j)})\bigr)^2}{\widehat{\operatorname{Var}}(Y)},
+    \label{eq:sobol-estimators}
+    S_i &= \frac{\frac{1}{N}\sum_{j=1}^{N} g(\mathbf{B}_j)\bigl(g(\mathbf{C}_i^{(j)}) - g(\mathbf{A}_j)\bigr)}{\widehat{\operatorname{Var}}(Y)}, \\[4pt]
+    S_{T_i} &= \frac{\frac{1}{2N}\sum_{j=1}^{N}\bigl(g(\mathbf{A}_j) - g(\mathbf{C}_i^{(j)})\bigr)^2}{\widehat{\operatorname{Var}}(Y)},
   \end{align}
-  where $\widehat{\operatorname{Var}}(Y)$ is the sample variance computed over the combined $\mathbf{A}$ and $\mathbf{B}$ evaluations.
+  where $\widehat{\operatorname{Var}}(Y)$ is the sample variance over the combined $\mathbf{A}$ and $\mathbf{B}$ evaluations.
 \end{enumerate}
 
-We use $N = 10{,}000$, giving a total of $10{,}000 \times (8 + 2) = 100{,}000$ model evaluations. Each evaluation solves the Riccati ODE with 500 time steps, which takes approximately 7\,ms, for a total computation time of about 12 minutes. We verified that the ODE solver with 500 steps agrees with a 2000-step solution to machine precision for all three QoIs, confirming that the time discretization error is negligible relative to the parameter-induced variation. This approach has previously been applied to ODE-based models in a similar setting; see \cite{jakobsson2023, piazzola2021} for applications to epidemiological models.
+We use $N = 10{,}000$ base samples, giving $10{,}000 \times 22 = 220{,}000$ model evaluations. Each evaluation solves the $3 \times 3$ Riccati ODE system with 500 Euler steps, which takes approximately 12\,ms on a standard computer, for a total computation time of about 45 minutes. This analysis is feasible only because of the ODE approximation; the PDE solver developed in Chapter~\ref{ch:pde} requires on the order of minutes per evaluation, making a comparable 220{,}000-evaluation study computationally prohibitive. The same Sobol-based methodology has been applied to ODE-based models in other contexts; see~\cite{jakobsson2023, piazzola2021} for applications to epidemiological compartment models.
 
 
+% ------------------------------------------------------------------
 \subsection{Forward uncertainty quantification}
+\label{sec:sa-forward-method}
 
-After identifying the important parameters through the Sobol analysis, we characterize the full output distributions by propagating the parameter uncertainty forward through the model. Rather than generating new samples, we reuse the $2N = 20{,}000$ evaluations from the Sobol computation (the $\mathbf{A}$ and $\mathbf{B}$ matrices), which are already drawn from the uniform prior distributions.
+After identifying the important parameters through the Sobol analysis, we characterize the full output distributions by propagating the parameter uncertainty forward through the model. Rather than generating new samples, we reuse the $2N = 20{,}000$ evaluations from the Sobol computation (the $\mathbf{A}$ and $\mathbf{B}$ samples), which are already drawn from the uniform prior distributions specified in Table~\ref{tab:sa-params}.
 
-For each QoI, we estimate the probability density function using Gaussian kernel density estimation with Silverman's rule for bandwidth selection. We report the mean, standard deviation, and 90\% credible interval (5th to 95th percentile) of each output distribution, and compare these to the nominal values obtained at the baseline parameter set.
-
-
-\section{Results: Sobol indices}
-\label{sec:sa-results}
-
-Tables~\ref{tab:sobol-qoi1}--\ref{tab:sobol-qoi3} report the first-order and total-effect Sobol indices for each QoI. The results reveal a striking pattern: different aspects of the optimal strategy are sensitive to entirely different parameters.
-
-% ── QoI 1 ──────────────────────────────────────────────────────
-\subsection{Neutral spread}
-
-\begin{table}[ht]
-\centering
-\caption{Sobol indices for the neutral spread $\delta^*(y = 0)$. Only $\beta_1$ and $\alpha_1$ contribute meaningfully.}
-\label{tab:sobol-qoi1}
-\begin{tabular}{@{}lcc@{}}
-\toprule
-Parameter & $S_i$ & $S_{T_i}$ \\
-\midrule
-$\sigma_{\text{EUR}}$ & 0.002 & 0.001 \\
-$\gamma$              & 0.000 & 0.001 \\
-$\lambda_{\text{scale}}$ & 0.002 & 0.001 \\
-$\alpha_1$            & \textbf{0.173} & \textbf{0.180} \\
-$\alpha_2$            & 0.000 & 0.000 \\
-$\beta_1$             & \textbf{0.784} & \textbf{0.818} \\
-$\beta_2$             & 0.000 & 0.000 \\
-$\eta$                & 0.000 & 0.000 \\
-\midrule
-$\sum$                & 0.96 & 1.00 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The neutral spread is controlled almost entirely by the logistic demand curve of the aggressive tier: $\beta_1$ accounts for 78\% of the variance and $\alpha_1$ for 17\%. All other parameters, including volatility, risk aversion, and arrival rates, are irrelevant. The first-order indices sum to 0.96, indicating that the model is nearly perfectly additive for this output.
-
-This result can be understood from the structure of the quoting formula. The optimal markup solves $\delta^* = \arg\max_\delta f(\delta)(\delta - p)$, where $p = ((2y + zd)^\top A(0) + B(0)^\top) \cdot d$ is the quoting momentum. At zero inventory with $B(0) = 0$ (which holds when the model parameters are direction-symmetric; see Chapter~\ref{ch:ode}), the momentum reduces to $p = z \cdot d^\top A(0)\,d$, which is small for the trade size $z = 1$\,M\$ considered here. The optimal markup is therefore dominated by the maximization of $f(\delta) \cdot \delta$ over the logistic demand curve, which depends only on $\alpha_1$ and $\beta_1$ of the tier being quoted. The Riccati matrix $A(0)$ does depend on $\sigma$, $\gamma$, and $\lambda$, but its contribution to the markup through $p$ is negligible at this trade size, consistent with the near-zero Sobol indices for these parameters.
-
-From a practical standpoint, this means that a bank seeking to control its base spread needs only to estimate the client demand curve accurately. Volatility and risk aversion are irrelevant for the flat-inventory spread.
+For each QoI, we estimate the probability density function using Gaussian kernel density estimation with Silverman's rule for bandwidth selection, and report the mean, standard deviation, coefficient of variation (CV), and 90\% credible interval (5th to 95th percentile). The coefficient of variation, defined as the ratio of the standard deviation to the absolute value of the mean, provides a scale-free measure of output robustness: a small CV indicates that the output is stable under parameter uncertainty, while a large CV signals that the model's prescription is highly sensitive to the input values.
 
 
-% ── QoI 2 ──────────────────────────────────────────────────────
-\subsection{Inventory skew}
+% ==================================================================
+\section{Results: quoting policy (Set A)}
+\label{sec:sa-results-a}
 
-\begin{table}[ht]
-\centering
-\caption{Sobol indices for the inventory skew $\delta^*(y = 10) - \delta^*(y = 0)$. Three market-level parameters dominate with roughly equal importance.}
-\label{tab:sobol-qoi2}
-\begin{tabular}{@{}lcc@{}}
-\toprule
-Parameter & $S_i$ & $S_{T_i}$ \\
-\midrule
-$\sigma_{\text{EUR}}$ & \textbf{0.325} & \textbf{0.347} \\
-$\gamma$              & \textbf{0.338} & \textbf{0.376} \\
-$\lambda_{\text{scale}}$ & \textbf{0.291} & \textbf{0.299} \\
-$\alpha_1$            & 0.005 & 0.006 \\
-$\alpha_2$            & 0.001 & 0.001 \\
-$\beta_1$             & 0.012 & 0.012 \\
-$\beta_2$             & 0.011 & 0.007 \\
-$\eta$                & 0.000 & 0.000 \\
-\midrule
-$\sum$                & 0.98 & 1.05 \\
-\bottomrule
-\end{tabular}
-\end{table}
+Before examining each QoI individually, Figure~\ref{fig:sa-heatmap} presents the total-effect Sobol indices for all 20 parameters and all 6 QoIs in a single heatmap. The block structure is immediately visible: the EUR/USD demand parameters (rows~6--9) light up only for QoI~1, the global market parameters (rows~1--5) dominate QoIs~2--5, and $\lambda_{\text{scale}}$ alone dominates QoI~6. The GBP/USD and EUR/GBP pair-specific parameters (rows~11--20) are dark across all QoIs. This pattern, which the following subsections examine in detail, reflects a clean separation between the microstructure parameters that control client pricing and the market-level parameters that control risk management.
 
-The inventory skew is driven by three parameters with roughly equal importance: risk aversion $\gamma$ (34\%), volatility $\sigma_{\text{EUR}}$ (33\%), and arrival rate scale $\lambda_{\text{scale}}$ (29\%). The demand curve parameters and execution cost are irrelevant. The model is again nearly additive, with $\sum S_i = 0.98$ and $\sum S_{T_i} = 1.05$.
-
-The skew arises from the value function gradient $2A(0)\,y$, where $A(0)$ is the Riccati matrix at time zero. The matrix $A$ encodes the cost of holding inventory: higher volatility increases inventory risk and drives $A$ larger, higher risk aversion directly amplifies the running penalty and hence $A$, and higher arrival rates change the structure of the quoting Hamiltonian and thereby influence how $A$ balances risk against profit. The demand curve parameters $(\alpha_n, \beta_n)$ affect the level of the spread but not its inventory dependence, because they enter through the Hamiltonian coefficients which scale $A$ approximately uniformly.
-
-From a practical standpoint, the inventory adjustment depends on accurately knowing the market environment --- volatility, overall flow volume --- and the risk preference. The client demand model, which was the dominant factor for the neutral spread, is essentially irrelevant here.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.75\textwidth]{figures/fig_sa_heatmap.pdf}
+  \caption{Total-effect Sobol indices $S_{T_i}$ for 20 parameters (rows) and 6 quantities of interest (columns). Values above 0.05 are annotated. Parameters are grouped into global, EUR/USD, GBP/USD, and EUR/GBP. The block structure shows that different QoIs are sensitive to different parameter groups.}
+  \label{fig:sa-heatmap}
+\end{figure}
 
 
-% ── QoI 3 ──────────────────────────────────────────────────────
-\subsection{Hedge rate}
+% ------------------------------------------------------------------
+\subsection{Tier spread differential}
+\label{sec:sa-qoi1}
 
-\begin{table}[ht]
-\centering
-\caption{Sobol indices for the hedge rate $\xi^*(y = 10)$. Four parameters contribute, with significant interactions ($\sum S_{T_i} = 1.21$).}
-\label{tab:sobol-qoi3}
-\begin{tabular}{@{}lcc@{}}
-\toprule
-Parameter & $S_i$ & $S_{T_i}$ \\
-\midrule
-$\sigma_{\text{EUR}}$ & \textbf{0.215} & \textbf{0.296} \\
-$\gamma$              & \textbf{0.220} & \textbf{0.317} \\
-$\lambda_{\text{scale}}$ & \textbf{0.188} & \textbf{0.257} \\
-$\alpha_1$            & 0.006 & 0.009 \\
-$\alpha_2$            & 0.000 & 0.001 \\
-$\beta_1$             & 0.030 & 0.044 \\
-$\beta_2$             & 0.006 & 0.006 \\
-$\eta$                & \textbf{0.157} & \textbf{0.282} \\
-\midrule
-$\sum$                & 0.82 & 1.21 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The tier spread differential measures how much wider the model quotes for passive clients (tier~2) compared to aggressive clients (tier~1) on EURUSD at flat inventory. Figure~\ref{fig:sa-qoi1} shows the Sobol indices and output distribution.
 
-The hedge rate is the most complex QoI. Four parameters contribute meaningfully: $\gamma$ (22\%), $\sigma_{\text{EUR}}$ (22\%), $\lambda_{\text{scale}}$ (19\%), and $\eta$ (16\%). Crucially, the gap between first-order and total-effect indices is much larger than for the previous two QoIs. The execution cost $\eta$, in particular, has $S_i = 0.16$ but $S_{T_i} = 0.28$, nearly twice as large, indicating strong interaction effects. The total-effect indices sum to 1.21, confirming that a substantial fraction of the variance is shared between parameters.
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi1.pdf}
+  \caption{QoI~1: tier spread differential. Left: Sobol indices for parameters with $S_{T_i} > 0.02$. Right: output distribution from forward UQ ($n = 20{,}000$ samples), with nominal value (dashed red) and 90\% credible interval (shaded).}
+  \label{fig:sa-qoi1}
+\end{figure}
 
-These interactions arise naturally from the hedge rate formula: $\xi^* = (p - \psi) / (2\eta)$, where $p$ is the hedging momentum derived from the value function gradient (and hence depends on $\sigma$, $\gamma$, and $\lambda$). The execution cost $\eta$ enters multiplicatively with $p$, so that changing $\eta$ amplifies or dampens the effect of changing any parameter that affects the gradient. This multiplicative coupling explains why $\eta$ has strong interactions with the other dominant parameters.
+The tier spread differential is controlled entirely by the EUR/USD demand curve parameters. The passive-tier logistic slope $\beta_2^{\text{EU}}$ accounts for 72\% of the output variance, followed by $\beta_1^{\text{EU}}$ (15\%), $\alpha_2^{\text{EU}}$ (9\%), and $\alpha_1^{\text{EU}}$ (3\%). All other parameters, including all global parameters and all GBP/USD and EUR/GBP parameters, have $S_{T_i} < 0.001$. The first-order indices sum to 1.03, indicating a perfectly additive model with no interactions.
 
-From a practical standpoint, the hedge rate is the least robust component of the optimal strategy. It depends on all the parameters that affect the inventory skew (volatility, risk aversion, flow activity) plus the execution cost, with significant nonlinear interactions. Underestimating $\eta$ is particularly dangerous because it enters inversely: a factor-of-two underestimate of market impact leads to a factor-of-two overestimate of the optimal hedging rate.
+This result follows from the structure of the quoting formula. At zero inventory with $B(0) = 0$ (which holds under the direction-symmetric parameters of~\cite{barzykin2023}), the quoting momentum~\eqref{eq:p-formula} reduces to $p = z\,d^\T A(0)\,d$, which is small for the trade size $z = 1$\,M\$ considered here. The optimal markup is therefore dominated by the maximization of $f^n(\delta) \cdot \delta$ over the logistic demand curve, which depends only on the $(\alpha_n, \beta_n)$ of the two tiers being compared. The Riccati matrix $A(0)$ does depend on $\sigma$, $\gamma$, $\rho$, and $\lambda$ through the full dynamics~\eqref{eq:riccati-A}, but its contribution to the momentum~$p$ is negligible at this trade size.
+
+A bank seeking to control its tiered client pricing therefore needs only to estimate the demand curves accurately. Volatility, risk aversion, and all cross-pair parameters are irrelevant for the flat-inventory spread differential. The forward UQ confirms moderate uncertainty (mean $= -0.22$\,bps, CV $= 39\%$, 90\% CI $= [-0.37, -0.09]$\,bps), reflecting the estimation error in the demand curve parameters.
 
 
-\subsection{Summary of sensitivity structure}
+% ------------------------------------------------------------------
+\subsection{Own-inventory skew}
+\label{sec:sa-qoi2}
 
-Table~\ref{tab:sobol-summary} summarizes the key finding: different aspects of the strategy are driven by different parameters.
+The own-inventory skew measures how the EURUSD markup adjusts when the dealer holds 10\,M\$ in EUR. Figure~\ref{fig:sa-qoi2} shows the results.
 
-\begin{table}[ht]
-\centering
-\caption{Dominant parameters for each quantity of interest.}
-\label{tab:sobol-summary}
-\begin{tabular}{@{}lll@{}}
-\toprule
-Quantity of interest & Dominant parameters & Interactions \\
-\midrule
-Neutral spread $\delta^*(y = 0)$              & $\beta_1$, $\alpha_1$ & Negligible \\
-Inventory skew $\delta^*(y = 10) - \delta^*(y = 0)$ & $\gamma$, $\sigma_{\text{EUR}}$, $\lambda_{\text{scale}}$ & Small \\
-Hedge rate $\xi^*(y = 10)$                    & $\gamma$, $\sigma_{\text{EUR}}$, $\lambda_{\text{scale}}$, $\eta$ & Significant \\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi2.pdf}
+  \caption{QoI~2: own-inventory skew. Left: Sobol indices. Right: output distribution.}
+  \label{fig:sa-qoi2}
+\end{figure}
 
-Two parameters can be identified as globally unimportant: the passive-tier demand parameters $\alpha_2$ and $\beta_2$ have $S_{T_i} \approx 0$ across all three QoIs and can be fixed at their nominal values without loss. This is expected: we evaluate the markup for tier~1, whose quoting formula uses only $\alpha_1$ and $\beta_1$ directly. The passive-tier parameters do enter the Riccati matrix $A$ through their contribution to the Hamiltonian coefficients, but this indirect coupling is negligibly small.
+The inventory skew is driven by three global parameters with roughly equal importance: $\sigma_{\text{EUR}}$ ($S_i = 0.35$, $S_{T_i} = 0.36$), $\gamma$ ($S_i = 0.32$, $S_{T_i} = 0.37$), and $\lambda_{\text{scale}}$ ($S_i = 0.26$, $S_{T_i} = 0.30$). All pair-specific parameters and the cross-pair parameters ($\sigma_{\text{GBP}}$, $\rho$) have $S_{T_i} < 0.01$. The model is nearly additive ($\sum S_i = 0.94$, $\sum S_{T_i} = 1.05$).
 
+The skew arises from the value function gradient $2A(0)\,y$, and each of the three dominant parameters shapes the Riccati solution~$A$ through a different channel. Higher volatility increases inventory risk through the driving term $-\tfrac{\gamma}{2}\Sigma$ in~\eqref{eq:riccati-A}, enlarging~$A$ and hence the skew. Higher risk aversion amplifies this driving term directly. Higher arrival rates change the structure of the quoting Hamiltonian coefficients that enter the nonlinear term $2AMA$ in~\eqref{eq:riccati-A}, altering how the model balances quoting revenue against inventory risk. The demand curve parameters $(\alpha_n, \beta_n)$ affect the level of the spread but not its inventory dependence, because they enter through the Hamiltonian Taylor coefficients which scale~$A$ approximately uniformly.
 
-\section{Results: forward uncertainty quantification}
-\label{sec:sa-forward}
+The cross-pair parameters $\rho$ and $\sigma_{\text{GBP}}$ do not appear, even though they affect the diagonal entry $A_{\text{EUR,EUR}}$ through the Riccati coupling. The coupling's effect on the own-pair diagonal entries of~$A$ is too small to register at this sample size. The inventory adjustment of a single pair depends on the market environment (volatility, overall flow, risk preference) and is insensitive to the client demand model.
 
-Having identified the important parameters, we now characterize the full output distributions by propagating the parameter uncertainty through the model. Table~\ref{tab:forward-uq} reports the mean, standard deviation, 90\% credible interval, and nominal value for each QoI.
-
-\begin{table}[ht]
-\centering
-\caption{Forward uncertainty quantification results. The coefficient of variation (CV) indicates the relative spread of each output distribution. The sample size is $2N = 20{,}000$.}
-\label{tab:forward-uq}
-\begin{tabular}{@{}lccccc@{}}
-\toprule
-QoI & Mean & Std & 90\% CI & Nominal & CV \\
-\midrule
-$\delta^*(y = 0)$ [bps]                    & 0.189 & 0.037 & $[0.138,\; 0.257]$ & 0.182 & 20\% \\
-$\delta^*(y{=}10) - \delta^*(y{=}0)$ [bps] & 0.152 & 0.058 & $[0.075,\; 0.262]$ & 0.126 & 38\% \\
-$\xi^*(y = 10)$ [M\$/day]                  & $-3207$ & 3414 & $[-9812,\; 0]$ & $-1879$ & 106\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The three QoIs exhibit markedly different levels of robustness under parameter uncertainty.
-
-The \textbf{neutral spread} is relatively robust, with a coefficient of variation of about 20\%. Its 90\% credible interval, $[0.138, 0.257]$\,bps, is reasonably tight. The nominal value of 0.182\,bps lies close to the mean of 0.189\,bps, indicating that the nominal parameterization is representative.
-
-The \textbf{inventory skew} is moderately uncertain, with a coefficient of variation of 38\%. The 90\% credible interval $[0.075, 0.262]$\,bps spans roughly a factor of 3.5 from low to high, reflecting the combined uncertainty in volatility, risk aversion, and arrival rates. The nominal value of 0.126\,bps falls below the mean of 0.152\,bps. This shift arises because the uniform range for $\gamma$, $[10, 40]$, has its midpoint at 25, above the nominal value of 20, so the average risk aversion in the sample is higher than the nominal. Since the inventory skew is increasing in $\gamma$, this pulls the mean output above the nominal.
-
-The \textbf{hedge rate} is highly uncertain, with a coefficient of variation exceeding 100\%. The 90\% credible interval $[-9812, 0]$\,M\$/day is enormous: the model prescribes hedge rates ranging from zero to nearly 10,000\,M\$/day, depending on the parameter values. The distribution is heavily skewed toward large negative values because low values of $\eta$ produce extremely aggressive hedging rates through the $1/(2\eta)$ factor. This confirms the Sobol analysis: the hedge rate depends on everything, and the inverse dependence on $\eta$ makes it particularly sensitive to execution cost estimation.
+Forward UQ: mean $= 0.15$\,bps, CV $= 38\%$, 90\% CI $= [0.07, 0.25]$\,bps. The nominal value of 0.12\,bps falls below the mean because the uniform range for~$\gamma$ ($[10, 40]$, midpoint 25) lies above the nominal value of 20, pulling the average skew upward.
 
 
+% ------------------------------------------------------------------
+\subsection{Cross-inventory skew}
+\label{sec:sa-qoi3}
+
+The cross-inventory skew measures how GBP inventory shifts the EURUSD markup. This QoI probes a mechanism that does not exist in a two-currency model: the cross-currency coupling through the off-diagonal entries of~$A$. Figure~\ref{fig:sa-qoi3} shows the results.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi3.pdf}
+  \caption{QoI~3: cross-inventory skew. Left: Sobol indices. Right: output distribution. The 90\% CI is entirely positive, confirming that the cross-pair coupling is a structural feature, not noise.}
+  \label{fig:sa-qoi3}
+\end{figure}
+
+The cross-inventory skew is primarily driven by the correlation $\rho$ ($S_i = 0.39$, $S_{T_i} = 0.47$), confirming that correlation is the gateway to all cross-pair effects. The risk aversion~$\gamma$ ($S_i = 0.20$, $S_{T_i} = 0.24$) and arrival rate scale $\lambda_{\text{scale}}$ ($S_i = 0.15$, $S_{T_i} = 0.19$) are secondary drivers. The GBP volatility $\sigma_{\text{GBP}}$ appears at a lower level ($S_i = 0.09$, $S_{T_i} = 0.12$), and EUR volatility $\sigma_{\text{EUR}}$ registers a minor contribution. The gap between $S_i$ and $S_{T_i}$ for $\rho$ (0.39 vs.\ 0.47) indicates moderate interaction with the other global parameters. The total-effect indices sum to 1.08, consistent with the presence of interactions.
+
+The cross-inventory skew depends on the off-diagonal entries of~$A$ that couple GBP to the EUR/USD quoting momentum. These entries arise from the correlation entering the Riccati driving term $-\tfrac{\gamma}{2}\Sigma$: the off-diagonal covariance is $\Sigma_{\text{EUR,GBP}} = \rho\,\sigma_{\text{EUR}}\,\sigma_{\text{GBP}}$, so when $\rho = 0$ the off-diagonal of~$\Sigma$ vanishes, $A_{\text{EUR,GBP}} = 0$, and the cross-skew is zero. The GBP volatility $\sigma_{\text{GBP}}$ enters for the same reason: it scales the off-diagonal covariance that generates the cross-pair coupling.
+
+One might expect that demand parameters of one pair could affect the strategy for another pair, since the Riccati matrices $M$, $\tilde{M}$, and $P$ aggregate Hamiltonian coefficients from all three pairs. The Sobol analysis shows that this coupling is negligible: no cross-pair demand parameter has $S_{T_i} > 0.015$ for the cross-inventory skew. Cross-pair effects propagate through the covariance matrix, not through client flow characteristics.
+
+The forward UQ shows a mean cross-skew of 0.055\,bps with CV $= 46\%$ and a 90\% CI of $[0.024, 0.105]$\,bps. The CI is entirely positive: the cross-pair coupling is consistently nonzero across the parameter space. The magnitude is about 38\% of the own-inventory skew (mean 0.15\,bps), confirming that cross-pair coupling is a genuine structural feature of the multi-currency model, large enough to be practically relevant for a bank managing multiple currency desks.
+
+
+% ==================================================================
+\section{Results: hedging and economics (Set B)}
+\label{sec:sa-results-b}
+
+
+% ------------------------------------------------------------------
+\subsection{Own-pair hedge rate}
+\label{sec:sa-qoi4}
+
+The own-pair hedge rate measures how aggressively the model hedges EUR exposure through the EURUSD interbank market. Figure~\ref{fig:sa-qoi4} shows the results.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi4.pdf}
+  \caption{QoI~4: own-pair hedge rate. Left: Sobol indices, showing the largest gap between $S_i$ and $S_{T_i}$ for~$\eta^{\text{EU}}$ (strong interactions). Right: output distribution, with CV $= 111\%$.}
+  \label{fig:sa-qoi4}
+\end{figure}
+
+Four parameters contribute: $\sigma_{\text{EUR}}$ ($S_i = 0.23$, $S_{T_i} = 0.33$), $\gamma$ ($S_i = 0.21$, $S_{T_i} = 0.33$), $\lambda_{\text{scale}}$ ($S_i = 0.19$, $S_{T_i} = 0.27$), and $\eta^{\text{EU}}$ ($S_i = 0.15$, $S_{T_i} = 0.28$). No cross-pair parameter has $S_{T_i} > 0.01$. The total-effect indices sum to 1.26, the highest of any QoI, indicating significant interaction effects.
+
+The interactions arise from the hedge rate formula. Outside the dead zone, $\xi^* = (p - \psi)/(2\eta)$, where the hedging momentum~$p$ depends on the value function gradient and hence on $\sigma$, $\gamma$, and~$\lambda$ through the Riccati solution. The execution cost~$\eta$ enters multiplicatively with~$p$: changing~$\eta$ amplifies or dampens the effect of every parameter that influences the gradient. This multiplicative coupling explains why $\eta^{\text{EU}}$ has the largest gap between $S_i$ and $S_{T_i}$ ($0.15$ vs.\ $0.28$, a ratio of nearly 2).
+
+The cross-pair parameters do not affect own-pair hedging. Although the model has EURGBP available as an alternative hedge instrument, the EURGBP dead zone blocks cross-hedging for nearly all parameter combinations (see QoI~5 below), so the EURUSD hedge rate is determined as if it were the only hedging channel.
+
+The forward UQ confirms that the hedge rate is the least robust component of the strategy: mean $= -2{,}896$\,M\$/day, standard deviation $= 3{,}211$, CV $= 111\%$, 90\% CI $= [-9{,}287,\; 0]$\,M\$/day. The CI spans more than an order of magnitude. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor. The upper end of the CI reaches zero, meaning that for some parameter combinations the hedging momentum falls within the dead zone and the model prescribes no hedging at all.
+
+
+% ------------------------------------------------------------------
+\subsection{Cross-hedge momentum}
+\label{sec:sa-qoi5}
+
+Chapter~\ref{ch:ode} showed that the model hedges EUR exposure through multiple pairs, including the cross pair EURGBP (Figure~\ref{fig:ode-hedging}). To measure the sensitivity of this cross-hedging channel, we examine the value function's incentive to cross-hedge: the raw hedging momentum~$p_{\text{EURGBP}}$ before the dead zone clips it. Figure~\ref{fig:sa-qoi5} shows the results.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi5.pdf}
+  \caption{QoI~5: cross-hedge momentum. Left: Sobol indices. Right: output distribution. The momentum is consistently negative (the model wants to sell EUR / buy GBP to hedge), but its magnitude is smaller than the EURGBP dead zone.}
+  \label{fig:sa-qoi5}
+\end{figure}
+
+The cross-hedge momentum is driven entirely by global parameters: $\sigma_{\text{EUR}}$ ($S_i = 0.36$, $S_{T_i} = 0.38$), $\rho$ ($S_i = 0.25$, $S_{T_i} = 0.25$), $\gamma$ ($S_i = 0.14$, $S_{T_i} = 0.18$), $\lambda_{\text{scale}}$ ($S_i = 0.11$, $S_{T_i} = 0.14$), and $\sigma_{\text{GBP}}$ ($S_i = 0.06$, $S_{T_i} = 0.06$). The model is nearly additive ($\sum S_{T_i} = 1.05$). No pair-specific execution cost or demand parameter appears, because the momentum measures the value function gradient directly, before any clipping or scaling by~$\eta$.
+
+EUR volatility dominates rather than $\rho$ because the momentum depends on $A_{\text{EUR,EUR}} - A_{\text{GBP,EUR}}$. The diagonal entry $A_{\text{EUR,EUR}}$ scales strongly with $\sigma_{\text{EUR}}$ through the Riccati driving term $-\tfrac{\gamma}{2}\Sigma$, while $\rho$ controls only the off-diagonal entry $A_{\text{GBP,EUR}}$. The diagonal contribution is larger in magnitude, giving $\sigma_{\text{EUR}}$ a higher Sobol index.
+
+The forward UQ shows a mean momentum of $-1.17 \times 10^{-5}$ (decimal) with CV $= 46\%$ and 90\% CI $= [-2.17, -0.39] \times 10^{-5}$. The momentum is consistently negative: the value function pushes toward selling EUR and buying GBP to reduce correlated risk. However, the EURGBP dead zone is $\psi_{\text{EG}} = 2.5 \times 10^{-5}$ in decimal units, which exceeds the typical momentum magnitude. Cross-hedging is structurally present in the value function but economically blocked by execution costs at the paper's parameter values. A more liquid cross pair (lower~$\psi$, lower~$\eta$) could unlock this channel.
+
+
+% ------------------------------------------------------------------
+\subsection{Net revenue}
+\label{sec:sa-qoi6}
+
+The net revenue aggregates quoting revenue across all three pairs minus total hedging cost, evaluated at the long-EUR inventory state. Figure~\ref{fig:sa-qoi6} shows the results.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_sa_qoi6.pdf}
+  \caption{QoI~6: net revenue. Left: Sobol indices, dominated by $\lambda_{\text{scale}}$ (78\%). Right: output distribution, with 90\% CI entirely positive.}
+  \label{fig:sa-qoi6}
+\end{figure}
+
+The arrival rate scale $\lambda_{\text{scale}}$ accounts for 78\% of the output variance. Revenue is roughly proportional to total client flow, and $\lambda_{\text{scale}}$ scales all arrival rates across all three pairs. The model is nearly additive ($\sum S_i = 0.99$, $\sum S_{T_i} = 1.05$). Secondary contributors include $\gamma$ (6\%), $\alpha_2^{\text{EU}}$ (4\%), $\sigma_{\text{EUR}}$ (3\%), and several demand parameters from multiple pairs at the 1--2\% level ($\alpha_2^{\text{GU}}$, $\beta_2^{\text{EU}}$, $\beta_2^{\text{GU}}$). This is the only QoI where GBP/USD demand parameters appear with nonzero Sobol indices, because net revenue sums contributions from all three pairs.
+
+The forward UQ gives a mean of \$502k/day, CV $= 48\%$, and 90\% CI $= [\$124\text{k},\; \$893\text{k}]$/day. The CI is entirely positive: the strategy is profitable across every parameter combination in the sample. The main source of revenue uncertainty is simply how much client flow the desk receives, not the risk management parameters.
+
+
+% ==================================================================
 \section{Discussion}
 \label{sec:sa-discussion}
 
-The results reveal a clean separation of the sensitivity structure. The base spread is a \emph{microstructure} quantity: it depends only on the shape of the client demand curve and is insensitive to market-level conditions. The inventory skew and hedge rate are \emph{risk management} quantities: they depend on the volatility environment, the risk preference, and the overall level of market activity. The execution cost $\eta$ matters only for hedging, not for quoting.
+% ------------------------------------------------------------------
+\subsection{Sensitivity structure}
+\label{sec:sa-sensitivity-structure}
 
-This separation has practical implications for model calibration. A bank implementing the strategy of \cite{barzykin2023} can calibrate the demand curve parameters $(\alpha_1, \beta_1)$ from client fill data to control the base spread, and separately estimate the market parameters $(\sigma, \gamma, \lambda)$ from broader market data to control the inventory management behavior. These two calibration tasks are largely independent and can proceed in parallel.
+The central finding of the analysis is that different aspects of the market making strategy are sensitive to entirely different parameters. Table~\ref{tab:sa-summary} summarizes the dominant parameters and the degree of interaction for each QoI.
 
-The finding that the hedge rate is the least robust output is also practically relevant. In real trading operations, hedging decisions involve large notional amounts executed on the dealer-to-dealer market. The sensitivity analysis shows that the model's hedging prescriptions are highly sensitive to the execution cost parameter $\eta$, which is among the hardest model inputs to estimate. This suggests that the hedging policy should be treated with more caution than the quoting policy, and that the model's hedging recommendations may benefit from additional robustness checks or conservative parameter choices.
+\begin{table}[ht]
+\centering
+\caption{Summary of the sensitivity structure. For each QoI, the dominant parameters (those with $S_{T_i} > 0.05$) and the presence of interactions ($\sum S_{T_i}$ relative to~1) are listed.}
+\label{tab:sa-summary}
+\begin{tabular}{@{}llc@{}}
+\toprule
+Quantity of interest & Dominant parameters & Interactions \\
+\midrule
+Tier spread differential (QoI~1) & $\beta_2^{\text{EU}}$, $\beta_1^{\text{EU}}$, $\alpha_2^{\text{EU}}$, $\alpha_1^{\text{EU}}$ & None \\
+Own-inventory skew (QoI~2) & $\sigma_{\text{EUR}}$, $\gamma$, $\lambda_{\text{scale}}$ & Small \\
+Cross-inventory skew (QoI~3) & $\rho$, $\gamma$, $\lambda_{\text{scale}}$, $\sigma_{\text{GBP}}$ & Moderate \\
+Own-pair hedge rate (QoI~4) & $\sigma_{\text{EUR}}$, $\gamma$, $\lambda_{\text{scale}}$, $\eta^{\text{EU}}$ & Significant \\
+Cross-hedge momentum (QoI~5) & $\sigma_{\text{EUR}}$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$ & Small \\
+Net revenue (QoI~6) & $\lambda_{\text{scale}}$ & None \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-All results in this chapter are based on the ODE approximation, which replaces the exact Hamiltonian with a quadratic Taylor expansion around zero quoting momentum. This approximation is accurate for moderate inventories but may break down at large $|y|$, where the quoting momentum becomes large and the higher-order terms in the Hamiltonian become significant. In Chapter~\ref{ch:pde}, we develop a grid-based PDE solver for the full HJB equation and use it to verify whether the sensitivity conclusions derived here carry over to the exact solution.
+The separation falls along clear lines. The tier spread differential is a \emph{microstructure} quantity: it depends only on the shape of the client demand curves and is insensitive to market-level conditions. The inventory skew and hedge rate are \emph{risk management} quantities: they depend on volatility, risk preference, and market activity, with the hedge rate additionally sensitive to execution cost. The cross-pair quantities (QoIs~3 and~5) introduce the correlation~$\rho$ as a new dimension that does not appear for any own-pair quantity. Net revenue is dominated by a single parameter, the overall level of client flow.
+
+This separation has practical implications for model calibration. A bank implementing the strategy of~\cite{barzykin2023} can calibrate the demand curve parameters from client fill data to control tiered pricing, and separately estimate the market parameters ($\sigma$, $\gamma$, $\lambda$) from broader market data to control the inventory management behavior. These two calibration tasks are largely independent and can proceed in parallel.
+
+The sensitivity rankings for QoIs~1, 2, and~4 reproduce what a two-currency analysis (with 8 parameters) would give. Adding 12 new parameters and the cross-currency coupling mechanism does not change the conclusions for own-pair quantities. The multi-currency model introduces new sensitivity dimensions ($\rho$, $\sigma_{\text{GBP}}$) that appear only in the cross-pair QoIs, confirming that the additional complexity is justified when cross-pair effects are of interest.
+
+
+% ------------------------------------------------------------------
+\subsection{Parameters that can be fixed}
+\label{sec:sa-fixable}
+
+Of the 20 parameters studied, 10 have $S_{T_i} < 0.025$ across all six QoIs. These are all 10 pair-specific parameters for GBP/USD and EUR/GBP: the demand curves ($\alpha_1$, $\alpha_2$, $\beta_1$, $\beta_2$) and execution costs ($\eta$) for both pairs. They can be fixed at their nominal values without meaningfully affecting any output of the model.
+
+The remaining 10 parameters form two groups. The five global parameters ($\sigma_{\text{EUR}}$, $\sigma_{\text{GBP}}$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$) drive all risk management and cross-pair QoIs. The four EUR/USD demand parameters ($\alpha_1^{\text{EU}}$, $\alpha_2^{\text{EU}}$, $\beta_1^{\text{EU}}$, $\beta_2^{\text{EU}}$) plus $\eta^{\text{EU}}$ drive the quoting and hedging QoIs for the pair being quoted and hedged.
+
+For a bank deploying this model, the message is concrete: calibration effort should focus on these 10 parameters. The demand curves of the non-primary pairs and their execution costs can be set approximately without affecting the strategy.
+
+
+% ------------------------------------------------------------------
+\subsection{Robustness of the optimal strategy}
+\label{sec:sa-robustness}
+
+The forward uncertainty quantification reveals a gradient of robustness across the strategy's components. Table~\ref{tab:sa-forward-uq} summarizes the output distributions.
+
+\begin{table}[ht]
+\centering
+\caption{Forward uncertainty quantification results. The coefficient of variation (CV) measures the relative spread of each output distribution. Sample size $2N = 20{,}000$.}
+\label{tab:sa-forward-uq}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+QoI & Mean & Std & 90\% CI & CV \\
+\midrule
+Tier spread diff.\ [bps]       & $-0.22$ & 0.09 & $[-0.37,\; -0.09]$ & 39\% \\
+Own-inv.\ skew [bps]           & $0.15$ & 0.06 & $[0.07,\; 0.25]$ & 38\% \\
+Cross-inv.\ skew [bps]         & $0.055$ & 0.026 & $[0.024,\; 0.105]$ & 46\% \\
+Own-pair hedge [M\$/day]       & $-2{,}896$ & 3{,}211 & $[-9{,}287,\; 0]$ & 111\% \\
+Cross-hedge mom.\ [decimal]    & $-1.17 \times 10^{-5}$ & $5.4 \times 10^{-6}$ & $[-2.2,\; -0.4] \times 10^{-5}$ & 46\% \\
+Net revenue [\$/day]           & $502{,}000$ & 240{,}000 & $[124\text{k},\; 893\text{k}]$ & 48\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The quoting policy is relatively robust, with CVs of 38--46\% for the spread differential, own-inventory skew, and cross-inventory skew. These outputs are stable under parameter uncertainty: the spreads and inventory adjustments change, but not by an order of magnitude. The hedge rate is a different story. With a CV of 111\% and a 90\% CI spanning from $-9{,}300$ to 0\,M\$/day, the model's hedging prescription is highly uncertain. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor.
+
+Figure~\ref{fig:sa-scatter-eta} makes this nonlinearity visible. The scatter plot of $\eta^{\text{EU}}$ versus the own-pair hedge rate shows the hyperbolic $1/\eta$ relationship: as $\eta$ decreases from $2 \times 10^{-5}$ to $0.5 \times 10^{-5}$, the hedge rate magnitude explodes from around $-1{,}000$ to beyond $-10{,}000$\,M\$/day. Underestimating market impact by a factor of two can lead to a factor-of-two overestimate of the optimal hedging rate.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/fig_sa_scatter_eta_hedge.pdf}
+  \caption{Scatter plot of $\eta^{\text{EU}}$ versus the own-pair hedge rate ($n = 20{,}000$ samples). The red curve shows the $1/\eta$ reference scaling. The enormous spread at low~$\eta$ values reflects the multiplicative interaction with other parameters.}
+  \label{fig:sa-scatter-eta}
+\end{figure}
+
+Figure~\ref{fig:sa-scatter-rho} illustrates a different type of sensitivity: the approximately linear relationship between~$\rho$ and the cross-inventory skew. As the correlation increases from 0.3 to 0.9, the cross-skew roughly doubles. This is consistent with the mechanism identified in Section~\ref{sec:sa-qoi3}: correlation controls the off-diagonal covariance $\Sigma_{\text{EUR,GBP}} = \rho\,\sigma_{\text{EUR}}\,\sigma_{\text{GBP}}$, which is the primary source of the cross-pair coupling in the Riccati equation. The vertical spread at each $\rho$ value reflects the combined effect of the other global parameters ($\gamma$, $\lambda_{\text{scale}}$, $\sigma_{\text{GBP}}$).
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.6\textwidth]{figures/fig_sa_scatter_rho_cross.pdf}
+  \caption{Scatter plot of the correlation~$\rho$ versus the cross-inventory skew ($n = 20{,}000$ samples). The cross-skew increases approximately linearly with~$\rho$, confirming that correlation gates the cross-pair coupling.}
+  \label{fig:sa-scatter-rho}
+\end{figure}
+
+The net revenue remains positive across the entire parameter space explored (90\% CI $= [\$124\text{k},\; \$893\text{k}]$/day). The strategy is profitable regardless of the parameter combination. The main risk under parameter uncertainty is not that the strategy loses money, but that the hedging prescriptions may be unreliable: the desk does not know how aggressively to hedge, even though it knows it will be profitable.
+
+
+% ------------------------------------------------------------------
+\subsection{Connection to the PDE solution}
+\label{sec:sa-bridge}
+
+All results in this chapter are based on the ODE approximation, which replaces the exact Hamiltonians with quadratic Taylor expansions around zero quoting momentum. In Chapter~\ref{ch:pde}, we develop a grid-based PDE solver for the full HJB equation in the two-currency case and compare the ODE and PDE solutions across a range of parameter regimes. This comparison verifies whether the sensitivity conclusions derived here carry over to the exact solution, or whether the quadratic approximation introduces biases that alter the sensitivity structure.

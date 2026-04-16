@@ -96,6 +96,28 @@ Treat diffusion implicitly, Hamiltonians explicitly. This was tried before the f
 - The ODE approximation is quite accurate for the paper's parameter set
 
 
+## PDE vs ODE comparison methodology
+
+See `pde_ode_comparison_design.md` for the full design of the improved
+comparison. Key elements:
+
+- 5 QoIs aligned with the 3-currency SA (tier spread differential, inventory
+  skew, hedge rate, net revenue, plus single-tier spread as diagnostic)
+- All 8 parameters tested (OAT, 17 PDE solves) + 15-20 Latin hypercube
+  points to probe multi-parameter corners
+- Comparison metrics: summary error table, sensitivity rankings with
+  Spearman rho, parity plots, value function theta profile, Hessian A
+  comparison
+- Bridging d=2 to d=3: theoretical argument + Riccati matrix inspection +
+  2-ccy vs 3-ccy ODE comparison (both cheap, ODE only)
+- Hedge rate error (up to 76% at extremes): framed in absolute terms,
+  shown to preserve sensitivity rankings, SA conclusions interpreted
+  qualitatively for this QoI
+
+Compute cached in `data/pde_comparison/`. Analysis notebook loads from
+disk and stays fast.
+
+
 ## Notes index
 
 | Topic | File |
@@ -119,3 +141,6 @@ Treat diffusion implicitly, Hamiltonians explicitly. This was tried before the f
 | Implicit solver design (PI) | `implicit/implicit_euler_policy_iteration.md` |
 | Implementation log | `implicit/implicit_solver_implementation_log.md` |
 | η-continuation and monotone scheme | `implicit/eta_continuation_and_monotone_scheme.md` |
+| **PDE vs ODE comparison** | |
+| Comparison design and methodology | `pde_ode_comparison_design.md` |
+| Why PDE stays at d=2 | `pde_dimension_discussion.md` |
