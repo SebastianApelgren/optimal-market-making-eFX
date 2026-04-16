@@ -47,8 +47,6 @@ The passive tier (alpha_2, beta_2) does not appear because we are quoting tier 1
 
 **Practical implication:** If the bank wants to control the base spread, the only thing that matters is accurately estimating the client demand curve (alpha_1, beta_1). Volatility and risk aversion are irrelevant for the flat-inventory spread.
 
-![Sobol indices for QoI 1](../../figs/sobol_QoI1.png)
-
 ### QoI 2: Inventory skew delta*(y=10) - delta*(y=0) [bps]
 
 How much the markup changes when the market maker is 10 M$ long EUR, compared to flat.
@@ -77,8 +75,6 @@ The demand curve parameters (alpha, beta) affect the *level* of the spread but n
 
 **Practical implication:** The inventory adjustment depends on accurately knowing the market conditions (volatility, flow volume) and the risk preference. The client demand model doesn't matter for this.
 
-![Sobol indices for QoI 2](../../figs/sobol_QoI2.png)
-
 ### QoI 3: Hedge rate xi*(y=10) [M$/day]
 
 How aggressively the model hedges when holding 10 M$ EUR.
@@ -104,8 +100,6 @@ The forward UQ shows this leads to enormous practical uncertainty: the 90% CI is
 
 **Practical implication:** The hedge rate is the least robust part of the strategy. It depends on everything: market conditions (sigma, lambda), risk preference (gamma), and execution cost estimation (eta). Getting eta wrong is particularly dangerous because it enters inversely — underestimating market impact leads to dramatically over-aggressive hedging.
 
-![Sobol indices for QoI 3](../../figs/sobol_QoI3.png)
-
 ### Forward UQ summary
 
 | QoI | Mean | Std | 90% CI | Nominal |
@@ -115,12 +109,6 @@ The forward UQ shows this leads to enormous practical uncertainty: the 90% CI is
 | xi*(y=10) [M$/day] | -3207 | 3414 | [-9812, 0] | -1879 |
 
 The neutral spread is relatively robust (std/mean ~ 20%), the inventory skew is moderately uncertain (std/mean ~ 38%), and the hedge rate is highly uncertain (std/mean > 100%).
-
-![Forward UQ distribution for QoI 1](../../figs/forward_QoI1.png)
-
-![Forward UQ distribution for QoI 2](../../figs/forward_QoI2.png)
-
-![Forward UQ distribution for QoI 3](../../figs/forward_QoI3.png)
 
 ## Parameters that can be safely fixed
 
