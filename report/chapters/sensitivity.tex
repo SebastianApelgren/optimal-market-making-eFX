@@ -104,7 +104,7 @@ Using single-currency perturbations isolates the own-inventory and cross-invento
 
 \begin{enumerate}
   \setcounter{enumi}{3}
-  \item \textbf{Own-pair hedge rate} (M\$/day). The optimal EURUSD hedge rate when holding 10\,M\$ in EUR:
+  \item \textbf{Own-pair hedge rate} (M\$/s). The optimal EURUSD hedge rate when holding 10\,M\$ in EUR:
   \[
     \text{QoI}_4 = \xi^*_{\text{EURUSD}}(y_{\text{long EUR}}).
   \]
@@ -146,7 +146,7 @@ where $X_{\sim i}$ denotes all parameters except~$X_i$. The \emph{total-effect i
   \label{eq:sobol-total}
   S_{T_i} = 1 - \frac{\operatorname{Var}_{X_{\sim i}}\!\bigl(\E_{X_i}[Y \mid X_{\sim i}]\bigr)}{\operatorname{Var}(Y)}.
 \end{equation}
-If $S_{T_i} \approx 0$, the parameter has no effect on the output and can be safely fixed at any value within its range. If $S_{T_i} \gg S_i$, the parameter participates in important interactions with other parameters. When the model is perfectly additive (no interactions), the first-order indices sum to one. Interactions cause $\sum_i S_i < 1$ and $\sum_i S_{T_i} > 1$, since the shared variance is counted once per participating parameter in the total-effect indices.
+If $S_{T_i} \approx 0$, the parameter has no effect on the output and can be safely fixed at any value within its range. If $S_{T_i} \gg S_i$, the parameter participates in important interactions with other parameters. A model is additive when each parameter's effect on the output does not depend on the values of the other parameters; equivalently, $S_i = S_{T_i}$ for every~$i$. When the model is perfectly additive, the first-order indices sum to one, while interactions cause $\sum_i S_i < 1$ and $\sum_i S_{T_i} > 1$, since the shared variance is counted once per participating parameter in the total-effect indices.
 
 We estimate the indices using the Monte Carlo procedure of Saltelli et al.~\cite{saltelli2010}, with the total-effect estimator of Jansen~\cite{jansen1999}. The algorithm proceeds as follows.
 \begin{enumerate}
@@ -178,7 +178,7 @@ For each QoI, we estimate the probability density function using Gaussian kernel
 \section{Results: quoting policy (Set A)}
 \label{sec:sa-results-a}
 
-Before examining each QoI individually, Figure~\ref{fig:sa-heatmap} presents the total-effect Sobol indices for all 20 parameters and all 6 QoIs in a single heatmap. The block structure is immediately visible: the EUR/USD demand parameters (rows~6--9) light up only for QoI~1, the global market parameters (rows~1--5) dominate QoIs~2--5, and $\lambda_{\text{scale}}$ alone dominates QoI~6. The GBP/USD and EUR/GBP pair-specific parameters (rows~11--20) are dark across all QoIs. This pattern, which the following subsections examine in detail, reflects a clean separation between the microstructure parameters that control client pricing and the market-level parameters that control risk management.
+Before examining each QoI individually, Figure~\ref{fig:sa-heatmap} presents the total-effect Sobol indices for all 20 parameters and all 6 QoIs in a single heatmap. The block structure is immediately visible: the EUR/USD demand parameters (rows~6--9) light up only for QoI~1, the global market parameters (rows~1--5) dominate QoIs~2--5, and $\lambda_{\text{scale}}$ alone dominates QoI~6. The GBP/USD and EUR/GBP pair-specific parameters (rows~11--20) are near-zero across all QoIs. This pattern, which the following subsections examine in detail, reflects a clean separation between the microstructure parameters that control client pricing and the market-level parameters that control risk management.
 
 \begin{figure}[t]
   \centering
@@ -201,7 +201,7 @@ The tier spread differential measures how much wider the model quotes for passiv
   \label{fig:sa-qoi1}
 \end{figure}
 
-The tier spread differential is controlled entirely by the EUR/USD demand curve parameters. The passive-tier logistic slope $\beta_2^{\text{EU}}$ accounts for 72\% of the output variance, followed by $\beta_1^{\text{EU}}$ (15\%), $\alpha_2^{\text{EU}}$ (9\%), and $\alpha_1^{\text{EU}}$ (3\%). All other parameters, including all global parameters and all GBP/USD and EUR/GBP parameters, have $S_{T_i} < 0.001$. The first-order indices sum to 1.03, indicating a perfectly additive model with no interactions.
+The tier spread differential is controlled entirely by the EUR/USD demand curve parameters. The passive-tier logistic slope $\beta_2^{\text{EU}}$ dominates ($S_i = 0.72$, $S_{T_i} = 0.72$), followed by $\beta_1^{\text{EU}}$ ($S_i = 0.17$, $S_{T_i} = 0.15$), $\alpha_2^{\text{EU}}$ ($S_i = 0.11$, $S_{T_i} = 0.09$), and $\alpha_1^{\text{EU}}$ ($S_i = 0.04$, $S_{T_i} = 0.03$). All other parameters, including all global parameters and all GBP/USD and EUR/GBP parameters, have $S_{T_i} < 0.001$. The first-order indices sum to 1.03 and the total-effect indices to 0.99; both estimates bracket 1 within Monte Carlo noise at $N = 10{,}000$, consistent with a perfectly additive model.
 
 This result follows from the structure of the quoting formula. At zero inventory with $B(0) = 0$ (which holds under the direction-symmetric parameters of~\cite{barzykin2023}), the quoting momentum~\eqref{eq:p-formula} reduces to $p = z\,d^\T A(0)\,d$, which is small for the trade size $z = 1$\,M\$ considered here. The optimal markup is therefore dominated by the maximization of $f^n(\delta) \cdot \delta$ over the logistic demand curve, which depends only on the $(\alpha_n, \beta_n)$ of the two tiers being compared. The Riccati matrix $A(0)$ does depend on $\sigma$, $\gamma$, $\rho$, and $\lambda$ through the full dynamics~\eqref{eq:riccati-A}, but its contribution to the momentum~$p$ is negligible at this trade size.
 
@@ -243,7 +243,7 @@ The cross-inventory skew measures how GBP inventory shifts the EURUSD markup, pr
   \label{fig:sa-qoi3}
 \end{figure}
 
-The cross-inventory skew is primarily driven by the correlation $\rho$ ($S_i = 0.39$, $S_{T_i} = 0.47$), confirming that correlation is the gateway to all cross-pair effects. The risk aversion~$\gamma$ ($S_i = 0.20$, $S_{T_i} = 0.24$) and arrival rate scale $\lambda_{\text{scale}}$ ($S_i = 0.15$, $S_{T_i} = 0.19$) are secondary drivers. The GBP volatility $\sigma_{\text{GBP}}$ appears at a lower level ($S_i = 0.09$, $S_{T_i} = 0.12$), and EUR volatility $\sigma_{\text{EUR}}$ registers a minor contribution. The gap between $S_i$ and $S_{T_i}$ for $\rho$ (0.39 vs.\ 0.47) indicates moderate interaction with the other global parameters. The total-effect indices sum to 1.08, consistent with the presence of interactions.
+The cross-inventory skew is primarily driven by the correlation $\rho$ ($S_i = 0.39$, $S_{T_i} = 0.47$), confirming that correlation is the gateway to all cross-pair effects. The risk aversion~$\gamma$ ($S_i = 0.20$, $S_{T_i} = 0.24$) and arrival rate scale $\lambda_{\text{scale}}$ ($S_i = 0.15$, $S_{T_i} = 0.19$) are secondary drivers. The GBP volatility $\sigma_{\text{GBP}}$ appears at a lower level ($S_i = 0.09$, $S_{T_i} = 0.12$), and EUR volatility $\sigma_{\text{EUR}}$ registers a minor contribution. The gap between $S_i$ and $S_{T_i}$ for $\rho$ (0.39 vs.\ 0.47) indicates moderate interaction with the other global parameters. The total-effect indices sum to 1.08, so the model is nearly additive with a modest interaction contribution concentrated on~$\rho$.
 
 The cross-inventory skew depends on the off-diagonal entries of~$A$ that couple GBP to the EUR/USD quoting momentum. These entries arise from the correlation entering the Riccati driving term $-\tfrac{\gamma}{2}\Sigma$: the off-diagonal covariance is $\Sigma_{\text{EUR,GBP}} = \rho\,\sigma_{\text{EUR}}\,\sigma_{\text{GBP}}$, so when $\rho = 0$ the off-diagonal of~$\Sigma$ vanishes, $A_{\text{EUR,GBP}} = 0$, and the cross-skew is zero. The GBP volatility $\sigma_{\text{GBP}}$ enters for the same reason: it scales the off-diagonal covariance that generates the cross-pair coupling.
 
@@ -276,7 +276,7 @@ The interactions arise from the hedge rate formula. Outside the dead zone, $\xi^
 
 The cross-pair parameters do not affect own-pair hedging. Although the model has EURGBP available as an alternative hedge instrument, the EURGBP dead zone blocks cross-hedging for nearly all parameter combinations (see QoI~5 below), so the EURUSD hedge rate is determined as if it were the only hedging channel.
 
-The forward UQ confirms that the hedge rate is the least robust component of the strategy: mean $= -2{,}896$\,M\$/day, standard deviation $= 3{,}211$, CV $= 111\%$, 90\% CI $= [-9{,}287,\; 0]$\,M\$/day. The CI spans more than an order of magnitude. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor. The upper end of the CI reaches zero, meaning that for some parameter combinations the hedging momentum falls within the dead zone and the model prescribes no hedging at all.
+The forward UQ confirms that the hedge rate is the least robust component of the strategy: mean $= -0.0335$\,M\$/s, standard deviation $= 0.0372$, CV $= 111\%$, 90\% CI $= [-0.107,\; 0]$\,M\$/s. The CI spans more than an order of magnitude. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor. The upper end of the CI reaches zero, meaning that for some parameter combinations the hedging momentum falls within the dead zone and the model prescribes no hedging at all.
 
 
 % ------------------------------------------------------------------
@@ -292,7 +292,7 @@ Chapter~\ref{ch:ode} showed that the model hedges EUR exposure through multiple 
   \label{fig:sa-qoi5}
 \end{figure}
 
-The cross-hedge momentum is driven entirely by global parameters: $\sigma_{\text{EUR}}$ ($S_i = 0.36$, $S_{T_i} = 0.38$), $\rho$ ($S_i = 0.25$, $S_{T_i} = 0.25$), $\gamma$ ($S_i = 0.14$, $S_{T_i} = 0.18$), $\lambda_{\text{scale}}$ ($S_i = 0.11$, $S_{T_i} = 0.14$), and $\sigma_{\text{GBP}}$ ($S_i = 0.06$, $S_{T_i} = 0.06$). The model is nearly additive ($\sum S_{T_i} = 1.05$). No pair-specific execution cost or demand parameter appears, because the momentum measures the value function gradient directly, before any clipping or scaling by~$\eta$.
+The cross-hedge momentum is driven entirely by global parameters: $\sigma_{\text{EUR}}$ ($S_i = 0.36$, $S_{T_i} = 0.38$), $\rho$ ($S_i = 0.25$, $S_{T_i} = 0.25$), $\gamma$ ($S_i = 0.14$, $S_{T_i} = 0.18$), $\lambda_{\text{scale}}$ ($S_i = 0.11$, $S_{T_i} = 0.14$), and $\sigma_{\text{GBP}}$ ($S_i = 0.06$, $S_{T_i} = 0.06$). The model is nearly additive ($\sum S_{T_i} = 1.05$). No pair-specific execution cost appears and no demand parameter has $S_{T_i} > 0.03$, because the momentum measures the value function gradient directly, before any clipping or scaling by~$\eta$.
 
 EUR volatility dominates rather than $\rho$ because the momentum depends on $A_{\text{EUR,EUR}} - A_{\text{GBP,EUR}}$. The diagonal entry $A_{\text{EUR,EUR}}$ scales strongly with $\sigma_{\text{EUR}}$ through the Riccati driving term $-\tfrac{\gamma}{2}\Sigma$, while $\rho$ controls only the off-diagonal entry $A_{\text{GBP,EUR}}$. The diagonal contribution is larger in magnitude, giving $\sigma_{\text{EUR}}$ a higher Sobol index.
 
@@ -308,13 +308,17 @@ The net revenue aggregates quoting revenue across all three pairs minus total he
 \begin{figure}[ht]
   \centering
   \includegraphics[width=\textwidth]{figures/fig_sa_qoi6.pdf}
-  \caption{QoI~6: net revenue. Left: Sobol indices, dominated by $\lambda_{\text{scale}}$ (78\%). Right: output distribution, with 90\% CI entirely positive.}
+  \caption{QoI~6: net revenue. Left: Sobol indices, dominated by $\lambda_{\text{scale}}$ ($S_{T_i} = 0.78$). Right: output distribution, with 90\% CI entirely positive.}
   \label{fig:sa-qoi6}
 \end{figure}
 
-The arrival rate scale $\lambda_{\text{scale}}$ accounts for 78\% of the output variance. Revenue is roughly proportional to total client flow, and $\lambda_{\text{scale}}$ scales all arrival rates across all three pairs. The model is nearly additive ($\sum S_i = 0.99$, $\sum S_{T_i} = 1.05$). Secondary contributors include $\gamma$ (6\%), $\alpha_2^{\text{EU}}$ (4\%), $\sigma_{\text{EUR}}$ (3\%), and several demand parameters from multiple pairs at the 1--2\% level ($\alpha_2^{\text{GU}}$, $\beta_2^{\text{EU}}$, $\beta_2^{\text{GU}}$). This is the only QoI where GBP/USD demand parameters appear with nonzero Sobol indices, because net revenue sums contributions from all three pairs.
+The arrival rate scale $\lambda_{\text{scale}}$ dominates ($S_i = 0.78$, $S_{T_i} = 0.78$). Revenue is roughly proportional to total client flow, and $\lambda_{\text{scale}}$ scales all arrival rates across all three pairs. The model is nearly additive ($\sum S_i = 0.99$, $\sum S_{T_i} = 1.05$). Secondary contributors are $\gamma$ ($S_i = 0.06$, $S_{T_i} = 0.07$), $\alpha_2^{\text{EU}}$ ($S_i = 0.04$, $S_{T_i} = 0.04$), and $\sigma_{\text{EUR}}$ ($S_i = 0.03$, $S_{T_i} = 0.05$), along with $\alpha_2^{\text{GU}}$ and $\beta_2^{\text{EU}}$ at $S_{T_i} \approx 0.02$. This is the only QoI where GBP/USD demand parameters appear with nonzero Sobol indices, because net revenue sums contributions from all three pairs.
 
-The forward UQ gives a mean of \$502k/day, CV $= 48\%$, and 90\% CI $= [\$124\text{k},\; \$893\text{k}]$/day. The CI is entirely positive: the strategy is profitable across every parameter combination in the sample. The main source of revenue uncertainty is simply how much client flow the desk receives, not the risk management parameters.
+The forward UQ gives
+\[
+  \text{mean} = \$502\text{k/day}, \qquad \text{CV} = 48\%, \qquad 90\%\ \text{CI} = [\$124\text{k},\; \$893\text{k}]/\text{day}.
+\]
+The CI is entirely positive: the strategy is profitable across every parameter combination in the sample. The main source of revenue uncertainty is simply how much client flow the desk receives, not the risk management parameters.
 
 
 % ==================================================================
@@ -335,12 +339,12 @@ The central finding of the analysis is that different aspects of the market maki
 \toprule
 Quantity of interest & Dominant parameters & Interactions \\
 \midrule
-Tier spread differential (QoI~1) & $\beta_2^{\text{EU}}$, $\beta_1^{\text{EU}}$, $\alpha_2^{\text{EU}}$, $\alpha_1^{\text{EU}}$ & None \\
+Tier spread differential (QoI~1) & $\beta_2^{\text{EU}}$, $\beta_1^{\text{EU}}$, $\alpha_2^{\text{EU}}$ & None \\
 Own-inventory skew (QoI~2) & $\sigma_{\text{EUR}}$, $\gamma$, $\lambda_{\text{scale}}$ & Small \\
-Cross-inventory skew (QoI~3) & $\rho$, $\gamma$, $\lambda_{\text{scale}}$, $\sigma_{\text{GBP}}$ & Moderate \\
+Cross-inventory skew (QoI~3) & $\rho$, $\gamma$, $\lambda_{\text{scale}}$, $\sigma_{\text{GBP}}$ & Small \\
 Own-pair hedge rate (QoI~4) & $\sigma_{\text{EUR}}$, $\gamma$, $\lambda_{\text{scale}}$, $\eta^{\text{EU}}$ & Significant \\
-Cross-hedge momentum (QoI~5) & $\sigma_{\text{EUR}}$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$ & Small \\
-Net revenue (QoI~6) & $\lambda_{\text{scale}}$ & None \\
+Cross-hedge momentum (QoI~5) & $\sigma_{\text{EUR}}$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$, $\sigma_{\text{GBP}}$ & Small \\
+Net revenue (QoI~6) & $\lambda_{\text{scale}}$, $\gamma$, $\sigma_{\text{EUR}}$ & Small \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -365,16 +369,16 @@ QoI & Mean & Std & 90\% CI & CV \\
 Tier spread diff.\ [bps]       & $-0.22$ & 0.09 & $[-0.37,\; -0.09]$ & 39\% \\
 Own-inv.\ skew [bps]           & $0.15$ & 0.06 & $[0.07,\; 0.25]$ & 38\% \\
 Cross-inv.\ skew [bps]         & $0.055$ & 0.026 & $[0.024,\; 0.105]$ & 46\% \\
-Own-pair hedge [M\$/day]       & $-2{,}896$ & 3{,}211 & $[-9{,}287,\; 0]$ & 111\% \\
+Own-pair hedge [M\$/s]         & $-0.0335$ & 0.0372 & $[-0.107,\; 0]$ & 111\% \\
 Cross-hedge mom.\ [decimal]    & $-1.17 \times 10^{-5}$ & $5.4 \times 10^{-6}$ & $[-2.2,\; -0.4] \times 10^{-5}$ & 46\% \\
 Net revenue [\$/day]           & $502{,}000$ & 240{,}000 & $[124\text{k},\; 893\text{k}]$ & 48\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The quoting policy is relatively robust, with CVs of 38--46\% for the spread differential, own-inventory skew, and cross-inventory skew. These outputs are stable under parameter uncertainty: the spreads and inventory adjustments change, but not by an order of magnitude. The hedge rate is a different story. With a CV of 111\% and a 90\% CI spanning from $-9{,}300$ to 0\,M\$/day, the model's hedging prescription is highly uncertain. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor.
+The quoting policy is relatively robust, with CVs of 38--46\% for the spread differential, own-inventory skew, and cross-inventory skew. These outputs are stable under parameter uncertainty: the spreads and inventory adjustments change, but not by an order of magnitude. The hedge rate is a different story. With a CV of 111\% and a 90\% CI spanning from $-0.108$ to 0\,M\$/s, the model's hedging prescription is highly uncertain. The distribution is heavily left-skewed because small values of~$\eta$ produce extremely large hedge rates through the $1/(2\eta)$ factor.
 
-Figure~\ref{fig:sa-scatter-eta} makes this nonlinearity visible. The scatter plot of $\eta^{\text{EU}}$ versus the own-pair hedge rate shows the hyperbolic $1/\eta$ relationship: as $\eta$ decreases from $2 \times 10^{-5}$ to $0.5 \times 10^{-5}$, the hedge rate magnitude explodes from around $-1{,}000$ to beyond $-10{,}000$\,M\$/day. Underestimating market impact by a factor of two can lead to a factor-of-two overestimate of the optimal hedging rate.
+Figure~\ref{fig:sa-scatter-eta} makes this nonlinearity visible. The scatter plot of $\eta^{\text{EU}}$ versus the own-pair hedge rate shows the hyperbolic $1/\eta$ relationship: as $\eta$ decreases from $2 \times 10^{-5}$ to $0.5 \times 10^{-5}$, the hedge rate magnitude explodes from around $-0.012$ to beyond $-0.12$\,M\$/s. Underestimating market impact by a factor of two can lead to a factor-of-two overestimate of the optimal hedging rate.
 
 \begin{figure}[ht]
   \centering

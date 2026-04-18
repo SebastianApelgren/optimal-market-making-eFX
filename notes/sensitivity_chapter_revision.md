@@ -9,7 +9,7 @@ Items marked with their original number from the review list.
 
 These are cases where the text states something that contradicts the actual Sobol index data. Must be fixed before submission.
 
-### [ ] A1. Summary table (Table 4.1) omits dominant parameters for QoI 6 [item 33]
+### [x] A1. Summary table (Table 4.1) omits dominant parameters for QoI 6 [item 33]
 
 The table caption says "dominant parameters (those with S\_Ti > 0.05)" but for QoI 6 (Net revenue) only lambda\_scale is listed. The actual data shows:
 - gamma: S\_Ti = 0.069 (above 0.05)
@@ -17,7 +17,7 @@ The table caption says "dominant parameters (those with S\_Ti > 0.05)" but for Q
 
 **Fix:** Add gamma and sigma\_EUR to the QoI 6 row in Table 4.1. Or change the threshold in the caption (e.g., >0.10) and adjust all rows to match.
 
-### [ ] A2. Inconsistent "Interactions" column in Table 4.1 [item 34]
+### [x] A2. Inconsistent "Interactions" column in Table 4.1 [item 34]
 
 The sum-of-S\_Ti values and their labels:
 | QoI | Sum S\_Ti | Label |
@@ -33,13 +33,13 @@ QoI 6 (1.050) is labeled "None" while QoI 5 (1.047) and QoI 2 (1.054) are labele
 
 **Fix:** Either label QoI 6 as "Small" for consistency, or define explicit thresholds (e.g., <1.02 = None, 1.02--1.10 = Small, etc.) and apply uniformly.
 
-### [ ] A3. QoI 5 text says "No pair-specific demand parameter appears" [item 29]
+### [x] A3. QoI 5 text says "No pair-specific demand parameter appears" [item 29]
 
 The data shows beta\_1^EU has S\_Ti = 0.025 for QoI 5, which IS a pair-specific demand parameter and appears in the Sobol bar chart (threshold 0.02). The text also says the model is "nearly additive (sum S\_Ti = 1.05)" but then for QoI 3 (sum S\_Ti = 1.08) says "consistent with the presence of interactions." See also A5 below.
 
 **Fix:** Either raise the bar chart threshold to 0.03 so beta\_1^EU drops out (and note it in text), or acknowledge beta\_1^EU as a minor contributor. More precisely: "No pair-specific parameter contributes more than 3%."
 
-### [ ] A4. QoI 6 text lists wrong parameter [item 31]
+### [x] A4. QoI 6 text lists wrong parameter [item 31]
 
 Text (sec 4.4.3): "several demand parameters from multiple pairs at the 1--2% level (alpha\_2^GU, beta\_2^EU, **beta\_2^GU**)."
 
@@ -47,7 +47,7 @@ The actual data: beta\_2^GU has S\_Ti = 0.011 (1.1%), which is at the noise floo
 
 **Fix:** Remove beta\_2^GU from the list (below noise floor). The parenthetical should be: "(alpha\_2^GU, beta\_2^EU)" at 2% each. Or raise the cutoff to 2%.
 
-### [ ] A5. Inconsistent "additive" vs "interacting" characterization [items 21, 28]
+### [x] A5. Inconsistent "additive" vs "interacting" characterization [items 21, 28]
 
 - QoI 2: sum S\_Ti = 1.054 -- text says "nearly additive"
 - QoI 3: sum S\_Ti = 1.075 -- text says "consistent with the presence of interactions"
@@ -57,7 +57,7 @@ The gap between 1.054 and 1.075 is only 0.02. Calling one "additive" and the oth
 
 **Fix:** Use consistent language. Suggestion: anything below ~1.10 is "nearly additive", 1.10--1.20 is "moderate interactions", above 1.20 is "significant interactions" (only QoI 4 at 1.26). State the threshold once in the methodology section and apply uniformly. This also fixes A2.
 
-### [ ] A6. Heatmap description says "dark" but should say "light/yellow" [item 14]
+### [x] A6. Heatmap description says "dark" but should say "light/yellow" [item 14]
 
 Text (sec 4.3): "The GBP/USD and EUR/GBP pair-specific parameters (rows 11--20) are dark across all QoIs."
 
@@ -65,7 +65,7 @@ With the YlOrRd colormap, low values are light yellow, not dark. High values are
 
 **Fix:** Change "dark" to "light yellow" or "near-zero" or simply "blank." The figure is being remade anyway (see Group D).
 
-### [ ] A7. Full data audit required [items 31, 33]
+### [x] A7. Full data audit required [items 31, 33]
 
 Given that multiple text-vs-data errors have been found, every numerical claim in sections 4.3--4.5 should be systematically verified against the printed Sobol indices. The QoI 1 section quotes S\_Ti values (72%, 15%, 9%, 3%) while using phrasing that implies S\_i ("accounts for X% of variance"). This works because QoI 1 is nearly additive so S\_i ~ S\_Ti, but is technically sloppy. Either quote S\_i values (72%, 17%, 11%, 4%) or clarify that the percentages are total-effect indices.
 
@@ -75,7 +75,7 @@ Given that multiple text-vs-data errors have been found, every numerical claim i
 
 ## Group B: Unit and Notation Consistency
 
-### [ ] B1. Hedge rate units: M$/day in Chapter 4 vs M$/s in Chapter 3 [item 43]
+### [x] B1. Hedge rate units: M$/day in Chapter 4 vs M$/s in Chapter 3 [item 43]
 
 The ODE chapter (section 3.5.2, Figure 3.X) plots hedge rates in **M$/s** (the plotting function in `src/plotting.py:118` divides by DAY\_SECONDS = 86,400). The sensitivity chapter defines QoI 4 as M$/day and reports all values in M$/day (mean = -2,896 M$/day, CI = [-9,287, 0]).
 
@@ -90,19 +90,19 @@ Recommendation: option 1 or 2. Pick one unit and use it everywhere. M$/day may b
 
 The net revenue (QoI 6) is in $/day, which should also be checked for consistency. The model chapter says "per unit time" without specifying; clarify.
 
-### [ ] B2. Sobol index format: % vs decimal [item 38]
+### [x] B2. Sobol index format: % vs decimal [item 38]
 
 In sections 4.3--4.4, some QoIs report Sobol indices as percentages ("72%", "6%") and others as decimals ("S\_i = 0.35, S\_Ti = 0.36"). This is inconsistent within the chapter.
 
 **Fix:** Pick one format and use it consistently. Recommendation: use decimal notation (0.35) when giving both S\_i and S\_Ti, and percent (35%) when summarizing a single dominant contribution in prose. Whatever the choice, state it once and be consistent.
 
-### [ ] B3. "mean" vs "nominal" in forward UQ [item 18]
+### [x] B3. "mean" vs "nominal" in forward UQ [item 18]
 
 The KDE plots label the dashed red line as "Nominal" (the value at the paper's parameter set). The text sometimes says "mean" when referring to the sample average. These are different quantities (the nominal is one specific evaluation; the mean is the average over all 20,000 samples). The text correctly uses both, but should always be clear which is which.
 
 **Fix:** No change needed in the text (the text does distinguish), but verify that every instance of "mean" refers to the sample mean and every instance of "nominal" refers to the paper's parameter values. In the forward UQ discussion: "The nominal value of 0.12 bps falls below the mean" -- this is correct usage.
 
-### [ ] B4. Net revenue sentence overflows page [item 32]
+### [x] B4. Net revenue sentence overflows page [item 32]
 
 Text (sec 4.4.3): "The forward UQ gives a mean of \$502k/day, CV = 48%, and 90% CI = [\$124k, \$893k]/day."
 
