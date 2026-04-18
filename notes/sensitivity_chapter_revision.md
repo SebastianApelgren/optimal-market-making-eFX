@@ -139,7 +139,7 @@ For the discussion paragraph [item 36], replace the 2-currency comparison with a
 
 All figures in this chapter need to reach the same publication quality as the ODE chapter figures.
 
-### [ ] D1. Heatmap: colorbar overlaps group labels [item 15]
+### [x] D1. Heatmap: colorbar overlaps group labels [item 15]
 
 The colorbar scale on the right side of the heatmap overlaps with the parameter group labels (EUR/USD, GBP/USD). The group labels are placed at `N_QOIS + 0.3` but the colorbar `pad=0.15` isn't enough.
 
@@ -151,7 +151,7 @@ The colorbar scale on the right side of the heatmap overlaps with the parameter 
 
 Also consider: the heatmap annotates values > 0.05 but the parameter table and text use different thresholds. Align them.
 
-### [ ] D2. Sobol bar charts: unexplained group coloring [item 16]
+### [x] D2. Sobol bar charts: unexplained group coloring [item 16]
 
 The per-QoI Sobol bar charts color bars by parameter group (blue for Global, red for EUR/USD, etc.) via the `GROUP_COLORS` dictionary. This coloring was inherited from another figure and is unexplained in the figure or caption. It adds visual noise without conveying information (the parameter names already indicate the group).
 
@@ -162,7 +162,7 @@ Additional issues with the bar charts:
 - The legend shows generic gray patches that don't match the actual bar colors
 - Consider: would a single combined figure (6 panels) be cleaner than 6 separate figures?
 
-### [ ] D3. Scatter plots: density hard to read [items 41, 44]
+### [x] D3. Scatter plots: density hard to read [items 41, 44]
 
 **eta vs hedge rate (Fig 4.X):** Most points cluster at hedge rate = 0 (inside dead zone), making the downward trend to -10,000 hard to see. The plot extends to -30,000 which wastes space.
 
@@ -180,7 +180,7 @@ Additional issues with the bar charts:
 - Use consistent visual language: if red = reference curve, use it for the linear fit; if red = nominal, use it in both figures
 - Same density visualization improvements as above
 
-### [ ] D4. Forward UQ density y-axis scales [item 26]
+### [x] D4. Forward UQ density y-axis scales [item 26]
 
 The KDE plots have very different y-axis scales: QoI 4 density peaks around 0.00025, QoI 5 around 80,000. This is expected (density integrates to 1, so narrow distributions have high peaks and wide distributions have low peaks). This is not an error.
 
