@@ -5,7 +5,7 @@ The ODE approximation developed in Chapter~\ref{ch:ode} computes the optimal mar
 
 We address this question through two complementary analyses. First, we use variance-based global sensitivity analysis \cite{sobol2001, saltelli2008} to decompose the output variance of each quantity of interest into contributions from individual parameters and their interactions. The resulting Sobol indices identify which parameters drive the uncertainty in each output and, equally important, which parameters can be safely fixed at nominal values. Second, we propagate the full parameter uncertainty forward through the model to obtain the probability distributions of the key strategy outputs, characterizing their spread and shape under realistic parameter ranges.
 
-We work with three currencies (USD, EUR, GBP), the smallest setting that includes cross-pair correlations, cross-inventory effects on quoting, and cross-hedging. These are the multi-currency features that are central to the model of~\cite{barzykin2023} and that were demonstrated in Chapter~\ref{ch:ode}: the EURUSD markup shifts with GBP inventory (Figure~\ref{fig:ode-quotes}), the dealer hedges EUR exposure through multiple pairs (Figure~\ref{fig:ode-hedging}), and the inventory distribution is shaped by the full covariance structure (Figure~\ref{fig:ode-inventory}). A two-currency analysis would miss all of these effects. With three currencies and three tradeable pairs, the model has 20 uncertain parameters and we define six quantities of interest that probe both the quoting policy and the hedging and economic outcomes.
+We work with three currencies (USD, EUR, GBP), the smallest setting that includes cross-pair correlations, cross-inventory effects on quoting, and cross-hedging. These are the multi-currency features that are central to the model of~\cite{barzykin2023} and that were demonstrated in Chapter~\ref{ch:ode}: the EURUSD markup shifts with GBP inventory (Figure~\ref{fig:ode-quotes}), the dealer hedges EUR exposure through multiple pairs (Figure~\ref{fig:ode-hedging}), and the inventory distribution is shaped by the full covariance structure (Figure~\ref{fig:ode-inventory}). Three currencies is the smallest setting that exhibits these mechanisms while remaining computationally tractable for a 220{,}000-evaluation Sobol study; adding more currencies would increase the parameter count but not introduce qualitatively new coupling mechanisms. With three currencies and three tradeable pairs, the model has 20 uncertain parameters and we define six quantities of interest that probe both the quoting policy and the hedging and economic outcomes.
 
 The chapter is organized as follows. Section~\ref{sec:sa-setup} defines the parameters under study and the quantities of interest. Section~\ref{sec:sa-methodology} describes the Sobol index framework and the forward uncertainty quantification procedure. Sections~\ref{sec:sa-results-a} and~\ref{sec:sa-results-b} present the results for the quoting policy and the hedging and economic quantities, respectively. Section~\ref{sec:sa-discussion} discusses the overall sensitivity structure, identifies parameters that can be fixed, and assesses the robustness of the optimal strategy.
 
@@ -97,7 +97,7 @@ Using single-currency perturbations isolates the own-inventory and cross-invento
   \[
     \text{QoI}_3 = \delta^*(y_{\text{long GBP}},\; \text{tier 1}) - \delta^*(y_{\text{flat}},\; \text{tier 1}).
   \]
-  This quantity is structurally zero in a two-currency model where GBP does not exist. It measures the cross-currency influence demonstrated in Figure~\ref{fig:ode-quotes}, where EURUSD quotes shift with GBP inventory through the off-diagonal entries of the Riccati matrix~$A$.
+  It measures the cross-currency influence demonstrated in Figure~\ref{fig:ode-quotes}, where EURUSD quotes shift with GBP inventory through the off-diagonal entries of the Riccati matrix~$A$.
 \end{enumerate}
 
 \paragraph{Set B: hedging and economics.}
@@ -123,7 +123,7 @@ Using single-currency perturbations isolates the own-inventory and cross-invento
   where $R = \sum_{\text{pairs, directions, tiers, sizes}} \lambda_k\,f(\delta^*)\,\delta^*\,z_k$ is the instantaneous revenue rate and $L_{\text{total}} = \sum_{\text{pairs}} (\psi\,|\xi^*| + \eta\,(\xi^*)^2)$ is the total hedging cost. This is the bottom line under inventory pressure: ``given that the desk is carrying EUR inventory, is it making money after hedging costs?''
 \end{enumerate}
 
-QoIs~1, 2, and 4 have direct analogues in a two-currency setting. QoIs~3 and 5 probe mechanisms that exist only with three or more currencies. QoI~6 integrates across all pairs. This mix allows us to ask both whether the sensitivity conclusions from a single-pair analysis survive in the multi-currency model and what new dimensions the cross-currency coupling introduces.
+QoIs~1, 2, and~4 measure own-pair quantities that depend on a single currency pair's parameters and the global market environment. QoIs~3 and~5 measure cross-pair quantities that depend on the correlation and volatility parameters coupling different pairs. QoI~6 integrates across all pairs. This mix lets us test whether cross-currency coupling introduces new sensitivity dimensions beyond the own-pair parameters.
 
 
 % ==================================================================
@@ -234,7 +234,7 @@ Forward UQ: mean $= 0.15$\,bps, CV $= 38\%$, 90\% CI $= [0.07, 0.25]$\,bps. The 
 \subsection{Cross-inventory skew}
 \label{sec:sa-qoi3}
 
-The cross-inventory skew measures how GBP inventory shifts the EURUSD markup. This QoI probes a mechanism that does not exist in a two-currency model: the cross-currency coupling through the off-diagonal entries of~$A$. Figure~\ref{fig:sa-qoi3} shows the results.
+The cross-inventory skew measures how GBP inventory shifts the EURUSD markup, probing the cross-currency coupling through the off-diagonal entries of~$A$. Figure~\ref{fig:sa-qoi3} shows the results.
 
 \begin{figure}[ht]
   \centering
@@ -347,21 +347,6 @@ Net revenue (QoI~6) & $\lambda_{\text{scale}}$ & None \\
 
 The separation falls along clear lines. The tier spread differential is a \emph{microstructure} quantity: it depends only on the shape of the client demand curves and is insensitive to market-level conditions. The inventory skew and hedge rate are \emph{risk management} quantities: they depend on volatility, risk preference, and market activity, with the hedge rate additionally sensitive to execution cost. The cross-pair quantities (QoIs~3 and~5) introduce the correlation~$\rho$ as a new dimension that does not appear for any own-pair quantity. Net revenue is dominated by a single parameter, the overall level of client flow.
 
-This separation has practical implications for model calibration. A bank implementing the strategy of~\cite{barzykin2023} can calibrate the demand curve parameters from client fill data to control tiered pricing, and separately estimate the market parameters ($\sigma$, $\gamma$, $\lambda$) from broader market data to control the inventory management behavior. These two calibration tasks are largely independent and can proceed in parallel.
-
-The sensitivity rankings for QoIs~1, 2, and~4 reproduce what a two-currency analysis (with 8 parameters) would give. Adding 12 new parameters and the cross-currency coupling mechanism does not change the conclusions for own-pair quantities. The multi-currency model introduces new sensitivity dimensions ($\rho$, $\sigma_{\text{GBP}}$) that appear only in the cross-pair QoIs, confirming that the additional complexity is justified when cross-pair effects are of interest.
-
-
-% ------------------------------------------------------------------
-\subsection{Parameters that can be fixed}
-\label{sec:sa-fixable}
-
-Of the 20 parameters studied, 10 have $S_{T_i} < 0.025$ across all six QoIs. These are all 10 pair-specific parameters for GBP/USD and EUR/GBP: the demand curves ($\alpha_1$, $\alpha_2$, $\beta_1$, $\beta_2$) and execution costs ($\eta$) for both pairs. They can be fixed at their nominal values without meaningfully affecting any output of the model.
-
-The remaining 10 parameters form two groups. The five global parameters ($\sigma_{\text{EUR}}$, $\sigma_{\text{GBP}}$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$) drive all risk management and cross-pair QoIs. The four EUR/USD demand parameters ($\alpha_1^{\text{EU}}$, $\alpha_2^{\text{EU}}$, $\beta_1^{\text{EU}}$, $\beta_2^{\text{EU}}$) plus $\eta^{\text{EU}}$ drive the quoting and hedging QoIs for the pair being quoted and hedged.
-
-For a bank deploying this model, the message is concrete: calibration effort should focus on these 10 parameters. The demand curves of the non-primary pairs and their execution costs can be set approximately without affecting the strategy.
-
 
 % ------------------------------------------------------------------
 \subsection{Robustness of the optimal strategy}
@@ -408,6 +393,19 @@ Figure~\ref{fig:sa-scatter-rho} illustrates a different type of sensitivity: the
 \end{figure}
 
 The net revenue remains positive across the entire parameter space explored (90\% CI $= [\$124\text{k},\; \$893\text{k}]$/day). The strategy is profitable regardless of the parameter combination. The main risk under parameter uncertainty is not that the strategy loses money, but that the hedging prescriptions may be unreliable: the desk does not know how aggressively to hedge, even though it knows it will be profitable.
+
+
+% ------------------------------------------------------------------
+\subsection{Practical implications}
+\label{sec:sa-practical}
+
+The sensitivity analysis has concrete consequences for a desk deploying this model. The quoting policy is the most reliable component: with CVs of 38--46\%, the tier spreads and inventory skew the model produces are stable under parameter uncertainty. A desk can set its client-facing quotes from the model with reasonable confidence, even if the underlying parameters carry estimation error.
+
+The hedging prescription is less reliable. With a CV of 111\%, the model's hedge rate is highly sensitive to the market impact parameter~$\eta$: the $1/(2\eta)$ factor means that small errors in the~$\eta$ estimate produce large swings in the prescribed hedging speed. The model identifies \emph{whether} to hedge and in \emph{which direction}, but the aggressiveness of hedging should be treated as a guide rather than a hard prescription. Real-time monitoring or trader oversight on hedging speed is warranted.
+
+Calibration effort should be targeted accordingly. Each pair's quoting depends on its own demand curve parameters ($\alpha_n$, $\beta_n$), while the risk management quantities depend on the global parameters ($\sigma$, $\rho$, $\gamma$, $\lambda_{\text{scale}}$) and the own-pair execution cost~$\eta$. Cross-pair demand parameters have negligible effect. These two groups also evolve differently: the global parameters reflect market conditions that shift daily and benefit from frequent recalibration, while the demand curves describe client behavior and change more slowly. In particular, a desk should monitor the correlation~$\rho$ closely, as the cross-inventory effect on quoting roughly doubles between low and high correlation regimes (Figure~\ref{fig:sa-scatter-rho}), making cross-pair positions more relevant for quoting during correlated markets.
+
+Despite the hedge rate uncertainty, the strategy's profitability is not in question. The net revenue 90\% CI is entirely positive (Table~\ref{tab:sa-forward-uq}). The risk under parameter uncertainty is not that the desk loses money, but that it hedges too aggressively or too passively, affecting the efficiency of the strategy rather than its sign.
 
 
 % ------------------------------------------------------------------
