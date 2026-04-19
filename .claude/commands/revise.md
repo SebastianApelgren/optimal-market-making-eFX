@@ -17,7 +17,7 @@ For example: `report/chapters/ode.tex notes/ode_chapter_revisions.md C`
 4. **For each open item, present:**
    - **Location:** Where in the chapter this item lives. Use the section/subsection name (e.g., "Section 3.4 — Parameters") and quote the first few words of the affected sentence so it's easy to find. For example: `Section 3.4 (Parameters), sentence starting "we use the parameter set from..."`.
    - A short summary of the issue (1-2 sentences)
-   - Your own proposed fix. The notes may contain suggested fixes, but treat those as a starting point only. Critically evaluate whether the suggested fix is correct and well-phrased, and propose your own version. Respect the writing style guidelines in CLAUDE.md.
+   - **Your own proposed fix.** Always write your own fix from scratch first, based on the issue description and the surrounding chapter text. Then, if the notes contain a suggested fix, critically evaluate it: is it correct? Is the phrasing natural and precise? Does it match the writing style in CLAUDE.md? Point out any problems with the suggested fix and explain why your version differs (or agree with it if it's genuinely good). Never just copy the suggested fix verbatim.
    - Show the specific old text and new text so I can see exactly what would change.
 
 5. **Wait for my approval.** Do NOT edit any files until I confirm which fixes to apply. I may want to modify your proposals or skip some items.
