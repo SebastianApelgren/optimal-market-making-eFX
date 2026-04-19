@@ -158,5 +158,6 @@
     "EUR/GBP",
     "EUR/GBP"
   ],
-  "seed": 42
+  "seed": 42,
+  "y_magnitude": 10.0
 }
