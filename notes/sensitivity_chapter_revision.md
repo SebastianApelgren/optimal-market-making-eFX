@@ -256,7 +256,7 @@ The PDE bridge section currently reads as an afterthought: "All results in this 
 
 Several items question whether 10 M$ is the right inventory level for the hedging QoIs.
 
-### [ ] F1. QoI 4: hedge rate at y=10M$ EUR [items 10, 22, 23, 24]
+### [x] F1. QoI 4: hedge rate at y=10M$ EUR [items 10, 22, 23, 24]
 
 At y\_EUR = 10 M$, the nominal hedge rate is -1,568 M$/day. The 90% CI reaches 0, meaning many parameter combinations land inside the dead zone (no hedging at all). This creates a heavily skewed distribution with a point mass near zero, making the QoI hard to interpret (CV = 111%).
 
@@ -274,13 +274,13 @@ At a larger inventory (e.g., y\_EUR = 20 M$), the hedge rate would be further fr
 
 **Recommendation:** Keep 10 M$ for the main analysis but consider adding a brief discussion (or appendix result) showing how the hedge rate sensitivity changes at 20 M$, to address the dead-zone boundary effect. This would also address items 23 and 24 about the cross-pair dead zone blocking cross-hedging.
 
-### [ ] F2. QoI 5: cross-hedge momentum [item 11]
+### [x] F2. QoI 5: cross-hedge momentum [item 11]
 
 The cross-hedge momentum is studied instead of the actual cross-hedge rate because the dead zone blocks cross-hedging at y=10M$. At larger inventory (20M$), the actual cross-hedge rate might become nonzero for some parameter combinations, making it a viable QoI.
 
 **Recommendation:** Same as F1. The momentum is a valid QoI that reveals the sensitivity structure of the cross-hedging incentive. But note in the text that at larger inventories, the dead zone would be breached and actual cross-hedging would occur.
 
-### [ ] F3. Cross-pair dead zone and inventory dependence [item 23]
+### [x] F3. Cross-pair dead zone and inventory dependence [item 23]
 
 Text: "the EURGBP dead zone blocks cross-hedging for nearly all parameter combinations... so the EURUSD hedge rate is determined as if it were the only hedging channel."
 
@@ -288,7 +288,7 @@ This is partly an artifact of the chosen inventory level. At larger EUR inventor
 
 **Fix:** Add a sentence: "At the chosen inventory of 10 M\$, the cross-hedge momentum (QoI 5) is smaller than the EURGBP dead zone for nearly all parameter combinations. At larger inventories, the dead zone would be breached and the EURUSD hedge rate would also depend on cross-pair parameters through the activated EURGBP channel."
 
-### [ ] F4. Stressed inventory scenario [item 25]
+### [x] F4. Stressed inventory scenario [item 25]
 
 Would a larger inventory "stress test" all QoIs? Quoting QoIs (1--3) would change because the momentum p increases with y. Hedging QoIs would change substantially. Revenue would change. This could be interesting follow-up work.
 
