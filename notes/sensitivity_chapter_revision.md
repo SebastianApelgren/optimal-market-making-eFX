@@ -298,43 +298,43 @@ Would a larger inventory "stress test" all QoIs? Quoting QoIs (1--3) would chang
 
 ## Group G: Structure and Repetition
 
-### [ ] G1. Lambda scale introduction order [item 4]
+### [x] G1. Lambda scale introduction order [item 4]
 
 In 4.1.1, the lambda scale parameter appears in the parameter table (paragraph 1) but is only explained in paragraph 3 ("The arrival rates... are scaled by a single shared multiplier lambda\_scale...").
 
 **Fix:** This is acceptable -- the table introduces the parameter and the explanation follows. But could move the explanation to paragraph 1 or add a brief note in the table caption: "The arrival rate scale lambda\_scale is a shared multiplier applied to all arrival rates (see text)."
 
-### [ ] G2. Repetition between intro and 4.1.1 [item 5]
+### [x] G2. Repetition between intro and 4.1.1 [item 5]
 
 The intro paragraph 1 explains which parameters are uncertain and why. Section 4.1.1 paragraph 2 repeats much of this.
 
 **Fix:** Keep the detailed explanation in 4.1.1 and shorten the intro. The intro should say *that* the parameters are uncertain (one sentence); section 4.1.1 explains *why* and *how much*. Remove from the intro: "Exchange rate volatilities fluctuate... Client arrival rates depend... The logistic demand parameters... are fitted from historical fill-or-reject data..." -- move all of this to 4.1.1 if not already there.
 
-### [ ] G3. CV context [item 40]
+### [x] G3. CV context [item 40]
 
 The methodology section introduces CV but doesn't give ranges for what constitutes "low" or "high." Then the results section says "relatively robust" for CVs of 38--46%.
 
 **Fix:** Add context in the methodology section, e.g.: "For reference, a CV below 25% indicates that the output is tightly constrained by the input uncertainty, 25--50% indicates moderate sensitivity, and above 100% signals that the output is dominated by parameter uncertainty." (Adjust thresholds as appropriate.) This gives the reader a frame before encountering the results.
 
-### [ ] G4. Table format inconsistency [item 39]
+### [x] G4. Table format inconsistency [item 39]
 
 The summary table (4.5.1) lists QoIs without units; the forward UQ table (4.5.3) includes units. This is fine since they serve different purposes, but could be made more parallel.
 
 **Fix (optional):** Add units to the summary table's QoI column. Minor improvement.
 
-### [ ] G5. Parameter reader burden [item 30]
+### [x] G5. Parameter reader burden [item 30]
 
 20 parameters with Greek symbols across 3 pairs. The reader cannot remember them all. The parameter table helps, and the grouping (global vs pair-specific) helps.
 
 **Fix (optional):** Consider adding a symbol glossary in the appendix, or a margin note at first use of each symbol in the results sections. This is standard thesis practice. Not urgent.
 
-### [ ] G6. ODE vs PDE model [item 48]
+### [x] G6. ODE vs PDE model [item 48]
 
 The sensitivity analysis is on the ODE model, and the text explains parameters in terms of ODE structures (matrix A, Riccati equation). The PDE model has the same parameters but different mechanics. The chapter doesn't discuss how parameters enter the PDE.
 
 **Fix:** This is fine for the thesis structure. The sensitivity analysis IS on the ODE model. The PDE comparison in Chapter 5 validates whether the ODE sensitivity conclusions carry over. No change needed, but the bridge section (4.5.4) should be clearer about this (see E9).
 
-### [ ] G7. Net revenue CI reference [item 45]
+### [x] G7. Net revenue CI reference [item 45]
 
 Text (4.5.3): "The net revenue remains positive across the entire parameter space explored (90% CI = [$124k, $893k]/day)."
 
@@ -342,7 +342,7 @@ This value appears in the forward UQ table above but the text doesn't reference 
 
 **Fix:** Add a reference: "...as confirmed by the forward UQ in Table~\ref{tab:sa-forward-uq}."
 
-### [ ] G8. "factor-of-two" hedge rate claim [item 42]
+### [x] G8. "factor-of-two" hedge rate claim [item 42]
 
 Text: "Underestimating market impact by a factor of two can lead to a factor-of-two overestimate of the optimal hedging rate."
 
