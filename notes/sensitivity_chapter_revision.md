@@ -190,31 +190,31 @@ The KDE plots have very different y-axis scales: QoI 4 density peaks around 0.00
 
 ## Group E: Writing Improvements (Prose and Phrasing)
 
-### [ ] E1. "key strategy outputs" [item 1]
+### [x] E1. "key strategy outputs" [item 1]
 
 Intro: "...to obtain the probability distributions of the key strategy outputs..."
 
 **Fix:** Replace with "...to obtain the probability distributions of each quantity of interest (QoI)..." since QoI is the term used throughout.
 
-### [ ] E2. Motivation for 3 currencies [item 2]
+### [x] E2. Motivation for 3 currencies [item 2]
 
 Intro: "We work with three currencies (USD, EUR, GBP), the smallest setting that includes..."
 
 **Fix:** Add: "...the smallest setting that includes cross-pair correlations, cross-inventory effects on quoting, and cross-hedging. Using the minimal multi-currency configuration keeps the parameter count manageable (20 parameters vs. potentially 50+ for five currencies) while capturing every qualitative mechanism in the model."
 
-### [ ] E3. "exogenous" [item 6]
+### [x] E3. "exogenous" [item 6]
 
 End of 4.1.1: "...the exogenous trade rates k\_i (negligibly small)."
 
 **Fix:** Replace "exogenous" with "external" or "background." E.g., "the background trade rates k\_i (negligibly small)."
 
-### [ ] E4. Parameter names in table [item 7]
+### [x] E4. Parameter names in table [item 7]
 
 "Logistic shift" and "Logistic slope" are technical but acceptable. The readers of this thesis will have read Chapter 2 where the logistic model is introduced. Could add a brief parenthetical reminder.
 
 **Fix (optional):** Rename to "Demand curve intercept" and "Demand curve steepness" if you want to be more intuitive. Or keep as is -- this is minor.
 
-### [ ] E5. Unnecessary sentence about determinism [item 8]
+### [x] E5. Unnecessary sentence about determinism [item 8]
 
 "All six are deterministic given the ODE solution and introduce no sampling noise."
 
@@ -222,26 +222,26 @@ This is true and relevant (it distinguishes the ODE-based SA from a Monte Carlo 
 
 **Fix:** Remove, or shorten to a parenthetical: "...we extract six scalar QoIs (all deterministic given the ODE solution)."
 
-### [ ] E6. Missing equation reference for markup formula [item 17]
+### [x] E6. Missing equation reference for markup formula [item 17]
 
 Text: "The optimal markup is therefore dominated by the maximization of f^n(delta) * delta over the logistic demand curve."
 
 **Fix:** Add the equation reference: "The optimal markup~\eqref{eq:delta-star} is therefore..."
 
-### [ ] E7. "before the dead zone clips it" [item 27]
+### [x] E7. "before the dead zone clips it" [item 27]
 
 QoI 5: "the raw hedging momentum p\_EURGBP before the dead zone clips it."
 
 **Fix:** Rephrase: "the raw hedging momentum p\_EURGBP, which measures the value function's incentive to cross-hedge before execution costs are applied."
 
-### [ ] E8. QoI numbers inconsistent in 4.5.1 [item 35]
+### [x] E8. QoI numbers inconsistent in 4.5.1 [item 35]
 
 The paragraph in 4.5.1 names some QoIs by description only and others by number:
 "The tier spread differential is a microstructure quantity... The cross-pair quantities (QoIs 3 and 5)... Net revenue is dominated..."
 
 **Fix:** Use both name and number consistently throughout: "The tier spread differential (QoI 1) is... The inventory skew (QoI 2) and hedge rate (QoI 4) are... The cross-pair quantities (QoIs 3 and 5)... Net revenue (QoI 6)..."
 
-### [ ] E9. Section 4.5.4 feels abrupt [item 47]
+### [x] E9. Section 4.5.4 feels abrupt [item 47]
 
 The PDE bridge section currently reads as an afterthought: "All results in this chapter are based on the ODE approximation... In Chapter 5, we develop a PDE solver..."
 
@@ -363,13 +363,13 @@ The last paragraph of 4.5.3 (about the desk being profitable but not knowing how
 
 ## Group H: Notebook Fixes
 
-### [ ] H1. Missing `all_params` variable on computation path [item 49]
+### [x] H1. Missing `all_params` variable on computation path [item 49]
 
 When running the computation cells (skipping "Load saved results"), the variable `all_params` is never defined. It is only created in the load cell as `all_params = np.concatenate([A_samples, B_samples], axis=0)`. The scatter plot cells use `all_params` and will crash with a NameError.
 
 **Fix:** Add `all_params = np.concatenate([A, B], axis=0)` to the computation/save cell (after `fwd_qois = np.concatenate([f_A, f_B], axis=0)`).
 
-### [ ] H2. Sanity check cell uses wrong inventory level (BUG FOUND)
+### [x] H2. Sanity check cell uses wrong inventory level (BUG FOUND)
 
 The sanity check cell (comparing n\_steps=500 vs n\_steps=2000) uses `y_long_eur = np.array([0.0, 20.0, 0.0])` for the high-accuracy reference, but `evaluate_qois()` uses `y_long_eur = np.array([0.0, 10.0, 0.0])`. This means the comparison is invalid: the 50--80% "relative errors" shown are NOT discretization errors but come from evaluating at different inventory levels.
 
