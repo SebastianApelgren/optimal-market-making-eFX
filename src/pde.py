@@ -66,7 +66,7 @@ def _compute_shift_slices(
       s >= 0: src = [s, n), dst = [0, n-s)
       s < 0:  src = [0, n+s), dst = [-s, n)
 
-    Returns (src_slices, dst_slices) — both select sub-arrays of the same shape.
+    Returns (src_slices, dst_slices); both select sub-arrays of the same shape.
     """
     src_slices = []
     dst_slices = []
@@ -95,7 +95,7 @@ def build_quoting_spec(
     """Precompute all (pair, tier, size) contributions with shift slices.
 
     Loops over directed pairs (i,j) with i != j, canonical pair lookup, tiers,
-    and sizes — the same structure as build_M_tildeM_P in riccati.py.
+    and sizes, the same structure as build_M_tildeM_P in riccati.py.
     """
     dy_list = validate_pde_grid(y_grids, mp)
     grid_shape = tuple(len(g) for g in y_grids)
@@ -750,7 +750,7 @@ def _thomas_solve_batch(
     ----------
     lower : 1D, length n (lower[0] unused).
     c_prime, denom_inv : from _thomas_factor, length n.
-    rhs : (batch, n) array — each row is an independent RHS.
+    rhs : (batch, n) array, each row is an independent RHS.
 
     Returns
     -------
@@ -1085,7 +1085,7 @@ def assemble_implicit_system(
     cols_list.append(all_idx)
     vals_list.append(np.ones(N))
 
-    # --- Penalty source (static, no θ dependence) — all points incl. boundary ---
+    # --- Penalty source (static, no θ dependence): all points incl. boundary ---
     source += dt * spec.penalty.ravel()
 
     # Interior mask: True at points where all axes are away from the boundary.
@@ -1270,7 +1270,7 @@ def assemble_implicit_system(
         y_i_int = (spec.y_grids[hc.i][1:-1][tuple(sl_i2)] * np.ones(bc_shape)).ravel()
         y_j_int = (spec.y_grids[hc.j][1:-1][tuple(sl_j2)] * np.ones(bc_shape)).ravel()
 
-        # Hedging gradient — monotone (M-matrix) differencing
+        # Hedging gradient: monotone (M-matrix) differencing
         #
         # The linearized hedging adds v·∂θ/∂y to the spatial RHS F[θ].
         # The implicit system is (I - dt·A)θ = rhs, where A includes
@@ -1476,7 +1476,7 @@ def solve_hjb_implicit_continuation(
     T = mp.T_days
     dt = T / n_steps
 
-    # Build base spec and scaled variants (quoting spec is shared — only
+    # Build base spec and scaled variants (quoting spec is shared; only
     # the hedging η changes).
     spec_base = build_pde_spec(y_grids, mp)
     specs = []
@@ -1504,7 +1504,7 @@ def solve_hjb_implicit_continuation(
     from tqdm import trange
 
     for m in trange(n_steps, desc="HJB implicit (η-continuation)", unit="step"):
-        theta_old = theta.copy()  # θ^m — fixed for the entire time step
+        theta_old = theta.copy()  # θ^m, fixed for the entire time step
         total_pi = 0
 
         for spec_eta in specs:

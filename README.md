@@ -47,7 +47,6 @@ optimal-market-making-eFX/
 ├── hjb_pde_solver.ipynb                     # Explicit Euler PDE with η scaled, validates spatial operators
 ├── eta_continuation_solver.ipynb            # Implicit PDE solver with the paper's original η
 ├── pde_ode_comparison.ipynb                 # PDE vs ODE comparison across parameter regimes
-├── sensitivity_analysis_2ccy.ipynb          # Two-currency Sobol indices and forward UQ
 └── sensitivity_analysis.ipynb               # Three-currency Sobol indices and forward UQ
 ```
 
@@ -60,8 +59,7 @@ optimal-market-making-eFX/
 | `hjb_pde_solver.ipynb` | Explicit Euler PDE solver with η×1000 scaling. Validates each spatial operator (diffusion, quoting, hedging, drift) against the ODE solution. |
 | `eta_continuation_solver.ipynb` | Fully implicit PDE solver with the paper's original parameters, monotone (M-matrix) upwinding for the hedging term, and policy iteration. |
 | `pde_ode_comparison.ipynb` | Systematic PDE vs ODE comparison across one-at-a-time and Latin-hypercube parameter perturbations in the two-currency case. |
-| `sensitivity_analysis_2ccy.ipynb` | Sobol indices and forward UQ for the two-currency ODE model. |
-| `sensitivity_analysis.ipynb` | Sobol indices and forward UQ for the three-currency ODE model — the main sensitivity results of the thesis. |
+| `sensitivity_analysis.ipynb` | Sobol indices and forward UQ for the three-currency ODE model, the main sensitivity results of the thesis. |
 
 ## Mathematical correspondence
 
